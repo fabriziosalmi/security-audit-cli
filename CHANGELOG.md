@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-25
+
+### Fixed
+
+- **Hardened State Integrity, `*os.Root` Drift Detection, and IDE/VSIX Boundaries (`FIND-0008` through `FIND-0011`, discovered via Round 5 dogfooding)**:
+  - `FIND-0008` (`internal/engine`): Required `.sec-audit-state.json` to load cleanly in `ValidateRunWithGate` instead of silently skipping `DetectSourceDrift` when `.sec-audit-state.json` is deleted or corrupted.
+  - `FIND-0009` (`internal/scanner`): Enforced `validator.VerifyRepoFileAndLine` (`*os.Root` + segment `Lstat`) inside `DetectSourceDrift` before computing `FileHashSHA256`, and canonicalized relative paths in `VerifyAndPinSourceFiles`, blocking intermediate directory symlink swaps after `SubmitHunter`.
+  - `FIND-0010` (`editors/vscode/extension.js`): Added `resolveContainedPath` (`path.relative` containment + `fs.lstatSync` symlink rejection) and strict fingerprint pattern validation across all IDE TreeView items, `DiagnosticCollection` locations, and `openLocation` targets.
+  - `FIND-0011` (`editors/vscode/pack/main.go`): Escaped all manifest fields via `encoding/xml.EscapeText` when generating `extension.vsixmanifest` and enforced `validator.ReadFileNoFollow` + `validator.ValidateJSONPreflight` on all VSIX inputs.
+
 ## [0.1.3] - 2026-10-25
 
 ### Added

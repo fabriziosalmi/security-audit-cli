@@ -1,5 +1,5 @@
 # sec-audit developer Makefile.
-VERSION     ?= 0.1.3
+VERSION     ?= 0.1.4
 LDFLAGS     := -s -w -X main.Version=$(VERSION)
 INSTALL_BIN := $(HOME)/.local/bin/sec-audit
 

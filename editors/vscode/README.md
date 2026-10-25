@@ -23,5 +23,5 @@ Thin, zero-dependency IDE cockpit with strict **1:1:1 parity** across the `sec-a
 
 ```sh
 make vsix
-code --install-extension dist/sec-audit-vscode-0.1.3.vsix
+code --install-extension dist/sec-audit-vscode-0.1.4.vsix
 ```

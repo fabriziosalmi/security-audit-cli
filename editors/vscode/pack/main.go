@@ -2,12 +2,16 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
 type pkgManifest struct {
@@ -19,6 +23,12 @@ type pkgManifest struct {
 	Engines     struct {
 		VSCode string `json:"vscode"`
 	} `json:"engines"`
+}
+
+func xmlEscape(s string) string {
+	var b bytes.Buffer
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
 }
 
 func main() {
@@ -33,9 +43,12 @@ func main() {
 }
 
 func buildVSIX(extDir, outPath string) error {
-	pkgBytes, err := os.ReadFile(filepath.Join(extDir, "package.json"))
+	pkgBytes, err := validator.ReadFileNoFollow(filepath.Join(extDir, "package.json"))
 	if err != nil {
 		return fmt.Errorf("read package.json: %w", err)
+	}
+	if err := validator.ValidateJSONPreflight(pkgBytes); err != nil {
+		return fmt.Errorf("package.json preflight: %w", err)
 	}
 	var pkg pkgManifest
 	if err := json.Unmarshal(pkgBytes, &pkg); err != nil {
@@ -81,7 +94,14 @@ func buildVSIX(extDir, outPath string) error {
     <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true"/>
   </Assets>
 </PackageManifest>
-`, pkg.Name, pkg.Version, pkg.Publisher, pkg.DisplayName, pkg.Description, pkg.Engines.VSCode)
+`,
+		xmlEscape(pkg.Name),
+		xmlEscape(pkg.Version),
+		xmlEscape(pkg.Publisher),
+		xmlEscape(pkg.DisplayName),
+		xmlEscape(pkg.Description),
+		xmlEscape(pkg.Engines.VSCode),
+	)
 
 	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -123,7 +143,7 @@ func buildVSIX(extDir, outPath string) error {
 		{filepath.Join(extDir, "media", "icon.svg"), "extension/media/icon.svg"},
 	}
 	for _, item := range files {
-		b, rerr := os.ReadFile(item.src)
+		b, rerr := validator.ReadFileNoFollow(item.src)
 		if rerr != nil {
 			return fmt.Errorf("read %s: %w", item.src, rerr)
 		}

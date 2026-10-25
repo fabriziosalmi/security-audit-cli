@@ -2,7 +2,7 @@
   "name": "sec-audit-vscode",
   "displayName": "Sec-Audit (Deterministic 6-Phase Security Audit)",
   "description": "1:1:1 IDE cockpit for sec-audit CLI and MCP server: live run status, source-trace navigation, coverage ledger, and GHSA advisories.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "fabriziosalmi",
   "license": "MIT",
   "repository": {

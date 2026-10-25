@@ -1,7 +1,7 @@
 # sec-audit
 
 [![ci](https://img.shields.io/badge/ci-passing-brightgreen)](.github/workflows/ci.yml)
-[![release](https://img.shields.io/badge/release-v0.1.3-blue)](CHANGELOG.md)
+[![release](https://img.shields.io/badge/release-v0.1.4-blue)](CHANGELOG.md)
 [![go.mod](https://img.shields.io/badge/go-1.24%2B-00ADD8)](go.mod)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 

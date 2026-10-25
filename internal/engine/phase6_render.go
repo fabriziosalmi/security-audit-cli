@@ -97,10 +97,12 @@ func ValidateRunWithGate(outputDir, failOn string) (map[string]any, error) {
 		}
 	}
 
-	if state, serr := rs.LoadState(); serr == nil {
-		driftErrs, _ := scanner.DetectSourceDrift(meta.Target, state)
-		findingsErrs = append(findingsErrs, driftErrs...)
+	state, serr := rs.LoadState()
+	if serr != nil {
+		return nil, fmt.Errorf("state read error: %w", serr)
 	}
+	driftErrs, _ := scanner.DetectSourceDrift(meta.Target, state)
+	findingsErrs = append(findingsErrs, driftErrs...)
 
 	gatePassed, gateReason, gerr := EvaluateFailOnGate(failOn, findings)
 	if gerr != nil {

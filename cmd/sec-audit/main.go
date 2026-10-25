@@ -16,7 +16,7 @@ import (
 )
 
 // Version is the canonical semantic version of sec-audit.
-var Version = "0.1.3"
+var Version = "0.1.4"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))

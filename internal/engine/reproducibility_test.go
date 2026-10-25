@@ -377,6 +377,22 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 	if err != nil || stAfterDrift.ReadyToRender || len(stAfterDrift.SourceDriftFiles) != 1 || stAfterDrift.SourceDriftFiles[0] != "src/api.go" {
 		t.Fatalf("expected Status to report source drift on src/api.go, got %+v err=%v", stAfterDrift, err)
 	}
+
+	// Break-test FIND-0009: replacing intermediate directory src/ with a symlink to an external directory must be caught by DetectSourceDrift
+	extDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(extDir, "api.go"), []byte("package api\nfunc Handle() {}\n"), 0o600)
+	_ = os.RemoveAll(filepath.Join(target, "src"))
+	_ = os.Symlink(extDir, filepath.Join(target, "src"))
+	stAfterSymlink, err := engine.Status(engine.StatusRequest{OutputDir: outDir})
+	if err != nil || len(stAfterSymlink.SourceDriftFiles) != 1 || stAfterSymlink.SourceDriftFiles[0] != "src/api.go" {
+		t.Fatalf("expected intermediate directory symlink to trigger source drift on src/api.go, got %+v err=%v", stAfterSymlink, err)
+	}
+
+	// Break-test FIND-0008: deleting .sec-audit-state.json must cause ValidateRunWithGate to fail closed with an error
+	_ = os.Remove(filepath.Join(outDir, ".sec-audit-state.json"))
+	if _, err := engine.ValidateRunWithGate(outDir, ""); err == nil {
+		t.Fatalf("expected ValidateRunWithGate to fail closed when .sec-audit-state.json is deleted")
+	}
 }
 
 func TestCarryoverUnchangedUnitsAndFailOnGates(t *testing.T) {

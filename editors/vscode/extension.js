@@ -54,6 +54,33 @@ function execSecAudit(subcommand, payload) {
 }
 
 /**
+ * Safely resolves a relative path inside baseDir, rejecting path traversal, absolute paths, and symlinks.
+ * @param {string} baseDir
+ * @param {string} relPath
+ * @returns {string}
+ */
+function resolveContainedPath(baseDir, relPath) {
+  if (!baseDir || !relPath || typeof relPath !== "string" || path.isAbsolute(relPath)) {
+    return "";
+  }
+  const absBase = path.resolve(baseDir);
+  const candidate = path.resolve(absBase, relPath);
+  const rel = path.relative(absBase, candidate);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
+    return "";
+  }
+  try {
+    const st = fs.lstatSync(candidate);
+    if (st.isSymbolicLink()) {
+      return "";
+    }
+  } catch (_) {
+    return "";
+  }
+  return candidate;
+}
+
+/**
  * Auto-detects the latest run directory under ~/security-audit-skill/<workspaceName>/run-N
  * when secAudit.outputDir is not explicitly set.
  * @returns {string}
@@ -173,10 +200,11 @@ function activate(context) {
       const files = await execSecAudit("catalog", {});
       if (!Array.isArray(files)) return;
       const nodes = files.map((cf) => {
-        const blockNodes = (cf.blocks || []).map((blk) => {
-          const ref = `${cf.name}#${blk.name}`;
+        const refs = Array.isArray(cf.class_blocks) && cf.class_blocks.length > 0 ? cf.class_blocks : (cf.block_refs || []);
+        const blockNodes = refs.map((ref) => {
+          const shortName = ref.includes("#") ? ref.split("#")[1] : ref;
           return new AuditNode(
-            blk.name,
+            shortName,
             vscode.TreeItemCollapsibleState.None,
             [],
             {
@@ -184,18 +212,18 @@ function activate(context) {
               title: "Open Playbook Block",
               arguments: [ref]
             },
-            blk.when_to_use ? blk.when_to_use.slice(0, 60) : "",
-            `${ref}\n\n${blk.when_to_use || ""}`,
-            new vscode.ThemeIcon("symbol-Method")
+            cf.file,
+            ref,
+            new vscode.ThemeIcon("symbol-method")
           );
         });
         return new AuditNode(
-          cf.name,
+          cf.file,
           vscode.TreeItemCollapsibleState.Collapsed,
           blockNodes,
           undefined,
           `${blockNodes.length} blocks`,
-          cf.name,
+          `${cf.title || cf.file}\n\n${cf.when_to_use || ""}`.trim(),
           new vscode.ThemeIcon("book")
         );
       });
@@ -251,17 +279,18 @@ function activate(context) {
       const actionNodes = (st.next_required_actions || []).map((act) =>
         new AuditNode(act, vscode.TreeItemCollapsibleState.None, [], undefined, "", act, new vscode.ThemeIcon("arrow-right"))
       );
-      const driftNodes = (st.source_drift_files || []).map((df) =>
-        new AuditNode(
+      const driftNodes = (st.source_drift_files || []).map((df) => {
+        const safeDriftPath = resolveContainedPath(targetRoot, df);
+        return new AuditNode(
           df,
           vscode.TreeItemCollapsibleState.None,
           [],
-          targetRoot ? { command: "sec-audit.openLocation", title: "Open File", arguments: [path.join(targetRoot, df), 1] } : undefined,
+          safeDriftPath ? { command: "sec-audit.openLocation", title: "Open File", arguments: [safeDriftPath, 1] } : undefined,
           "SHA-256 drift",
           df,
           new vscode.ThemeIcon("warning")
-        )
-      );
+        );
+      });
       const budgetStr = st.budget !== undefined && st.budget !== null ? `${st.agents_spent} / ${st.budget}` : `${st.agents_spent} (unbounded)`;
       const roots = [
         new AuditNode(`Run: ${st.run_id}`, vscode.TreeItemCollapsibleState.None, [], undefined, `${st.repo} (${st.profile})`, activeOutputDir, new vscode.ThemeIcon("shield")),
@@ -294,24 +323,24 @@ function activate(context) {
 
         for (const f of findings) {
           const traceNodes = (f.trace || []).map((t, idx) => {
-            const absFile = targetRoot ? path.join(targetRoot, t.file) : t.file;
+            const absFile = resolveContainedPath(targetRoot, t.file);
             return new AuditNode(
               `${idx + 1}. [${t.kind}] ${t.file}:${t.line}`,
               vscode.TreeItemCollapsibleState.None,
               [],
-              { command: "sec-audit.openLocation", title: "Open Source Trace", arguments: [absFile, t.line] },
+              absFile ? { command: "sec-audit.openLocation", title: "Open Source Trace", arguments: [absFile, t.line] } : undefined,
               t.scope,
               t.description,
               new vscode.ThemeIcon(t.kind === "sink" ? "flame" : t.kind === "entrypoint" ? "sign-in" : "arrow-small-right")
             );
           });
           const evNodes = (f.evidence || []).map((ev) => {
-            const absFile = targetRoot ? path.join(targetRoot, ev.file) : ev.file;
+            const absFile = resolveContainedPath(targetRoot, ev.file);
             return new AuditNode(
               `${ev.file}:${ev.line}`,
               vscode.TreeItemCollapsibleState.None,
               [],
-              { command: "sec-audit.openLocation", title: "Open Evidence", arguments: [absFile, ev.line] },
+              absFile ? { command: "sec-audit.openLocation", title: "Open Evidence", arguments: [absFile, ev.line] } : undefined,
               "evidence",
               ev.description,
               new vscode.ThemeIcon("file-code")
@@ -321,14 +350,15 @@ function activate(context) {
           const sev = f.severity && f.severity.overall_severity ? f.severity.overall_severity.toUpperCase() : f.verdict.toUpperCase();
           const detailChildren = [
             new AuditNode(`Root Cause: ${f.root_cause || f.claimed_root_cause || "n/a"}`, vscode.TreeItemCollapsibleState.None, [], undefined, "", f.description, new vscode.ThemeIcon("info")),
-            new AuditNode(`Source Trace (${traceNodes.length})`, vscode.TreeItemCollapsibleState.Expanded, traceNodes, undefined, "", "", new vscode.ThemeIcon("Debug-step-into")),
+            new AuditNode(`Source Trace (${traceNodes.length})`, vscode.TreeItemCollapsibleState.Expanded, traceNodes, undefined, "", "", new vscode.ThemeIcon("debug-step-into")),
             new AuditNode(`Evidence (${evNodes.length})`, vscode.TreeItemCollapsibleState.Collapsed, evNodes, undefined, "", "", new vscode.ThemeIcon("references"))
           ];
-          const advFile = path.join(activeOutputDir, "advisories", `GHSA-${f.fingerprint}.md`);
-          if (fs.existsSync(advFile)) {
+          const safeFP = typeof f.fingerprint === "string" && /^[A-Za-z0-9._:-]{3,80}$/.test(f.fingerprint) ? f.fingerprint : "";
+          const advFile = safeFP ? resolveContainedPath(activeOutputDir, path.join("advisories", `GHSA-${safeFP}.md`)) : "";
+          if (advFile && fs.existsSync(advFile)) {
             detailChildren.push(
               new AuditNode(
-                `Open GHSA-${f.fingerprint}.md`,
+                `Open GHSA-${safeFP}.md`,
                 vscode.TreeItemCollapsibleState.None,
                 [],
                 { command: "sec-audit.openLocation", title: "Open GHSA Advisory", arguments: [advFile, 1] },
@@ -355,7 +385,9 @@ function activate(context) {
           // Add VS Code inline diagnostic at the sink (last trace element) for confirmed & needs_validation
           if ((f.verdict === "confirmed" || f.verdict === "needs_validation") && targetRoot && Array.isArray(f.trace) && f.trace.length > 0) {
             const sink = f.trace[f.trace.length - 1];
-            const sinkUri = vscode.Uri.file(path.join(targetRoot, sink.file));
+            const safeSinkPath = resolveContainedPath(targetRoot, sink.file);
+            if (!safeSinkPath) continue;
+            const sinkUri = vscode.Uri.file(safeSinkPath);
             const lineZero = Math.max(0, (sink.line || 1) - 1);
             const range = new vscode.Range(lineZero, 0, lineZero, 200);
             let diagSev = vscode.DiagnosticSeverity.Information;
@@ -367,10 +399,16 @@ function activate(context) {
             const diag = new vscode.Diagnostic(range, msg, diagSev);
             diag.source = "sec-audit";
             diag.code = f.fingerprint;
-            diag.relatedInformation = f.trace.map((t) => new vscode.DiagnosticRelatedInformation(
-              new vscode.Location(vscode.Uri.file(path.join(targetRoot, t.file)), new vscode.Position(Math.max(0, (t.line || 1) - 1), 0)),
-              `[${t.kind}] ${t.description}`
-            ));
+            diag.relatedInformation = f.trace
+              .map((t) => {
+                const tp = resolveContainedPath(targetRoot, t.file);
+                if (!tp) return null;
+                return new vscode.DiagnosticRelatedInformation(
+                  new vscode.Location(vscode.Uri.file(tp), new vscode.Position(Math.max(0, (t.line || 1) - 1), 0)),
+                  `[${t.kind}] ${t.description}`
+                );
+              })
+              .filter(Boolean);
             const key = sinkUri.toString();
             if (!diagMap.has(key)) diagMap.set(key, { uri: sinkUri, list: [] });
             diagMap.get(key).list.push(diag);
@@ -402,12 +440,12 @@ function activate(context) {
         for (const u of units) {
           if (!groups[u.status]) groups[u.status] = [];
           const pathNodes = (u.starting_paths || []).map((sp) => {
-            const absFile = targetRoot ? path.join(targetRoot, sp) : sp;
+            const absFile = resolveContainedPath(targetRoot, sp);
             return new AuditNode(
               sp,
               vscode.TreeItemCollapsibleState.None,
               [],
-              { command: "sec-audit.openLocation", title: "Open Starting Path", arguments: [absFile, 1] },
+              absFile ? { command: "sec-audit.openLocation", title: "Open Starting Path", arguments: [absFile, 1] } : undefined,
               "starting_path",
               sp,
               new vscode.ThemeIcon("file")
@@ -450,6 +488,15 @@ function activate(context) {
         vscode.window.showWarningMessage(`File not found on disk: ${filePath}`);
         return;
       }
+      try {
+        const st = fs.lstatSync(filePath);
+        if (st.isSymbolicLink() || !st.isFile()) {
+          vscode.window.showWarningMessage(`Refusing to open non-regular or symlinked file: ${filePath}`);
+          return;
+        }
+      } catch (_) {
+        return;
+      }
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
       const editor = await vscode.window.showTextDocument(doc, { preview: true });
       const lineZero = Math.max(0, (line || 1) - 1);
@@ -460,8 +507,8 @@ function activate(context) {
 
     vscode.commands.registerCommand("sec-audit.openReport", async () => {
       if (!activeOutputDir) return;
-      const rpt = path.join(activeOutputDir, "REPORT.md");
-      if (fs.existsSync(rpt)) {
+      const rpt = resolveContainedPath(activeOutputDir, "REPORT.md");
+      if (rpt && fs.existsSync(rpt)) {
         const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(rpt));
         await vscode.window.showTextDocument(doc);
       }
@@ -470,7 +517,7 @@ function activate(context) {
     vscode.commands.registerCommand("sec-audit.openCatalogBlock", async (blockRef) => {
       try {
         const blk = await execSecAudit("catalog", { block: blockRef });
-        const content = `# ${blk.file} — ${blk.name}\n\n**When to use**: ${blk.when_to_use || "Always"}\n\n---\n\n${blk.content || ""}`;
+        const content = `# ${blk.file} (${blk.name})\n\n- **Reference**: \`${blk.ref}\`\n- **Kind**: \`${blk.kind}\`\n\n---\n\n${blk.content || ""}`;
         const doc = await vscode.workspace.openTextDocument({ content, language: "markdown" });
         await vscode.window.showTextDocument(doc, { preview: true });
       } catch (err) {

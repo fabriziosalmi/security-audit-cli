@@ -198,10 +198,11 @@ func VerifyAndPinSourceFiles(targetDir string, state *store.InternalState, relPa
 	if state.SourceHashes == nil {
 		state.SourceHashes = make(map[string]string)
 	}
-	for _, rel := range relPaths {
-		if rel == "" {
+	for _, rawRel := range relPaths {
+		if rawRel == "" {
 			continue
 		}
+		rel := filepath.ToSlash(filepath.Clean(rawRel))
 		if err := validator.VerifyRepoFileAndLine(targetDir, rel, 0); err != nil {
 			return err
 		}
@@ -244,6 +245,11 @@ func DetectSourceDrift(targetDir string, state *store.InternalState) ([]string, 
 	var drifted []string
 	for _, rel := range keys {
 		expected := state.SourceHashes[rel]
+		if err := validator.VerifyRepoFileAndLine(targetDir, rel, 1); err != nil {
+			errs = append(errs, fmt.Sprintf("source drift detected on %q: %v", rel, err))
+			drifted = append(drifted, rel)
+			continue
+		}
 		absPath := filepath.Join(targetDir, filepath.FromSlash(rel))
 		curHash, err := FileHashSHA256(absPath)
 		if err != nil {
