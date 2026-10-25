@@ -430,4 +430,15 @@ func TestValidateFindingsAllVerdictsAndNestedAdditionalProps(t *testing.T) {
 			t.Fatalf("expected error containing %q, got:\n%s", wantSubstr, strings.Join(errs, "\n"))
 		}
 	}
+
+	// Oversized file in VerifyRepoFileAndLine with line > 0 must be rejected
+	oversizedRepo := t.TempDir()
+	bigBuf := make([]byte, validator.MaxInputBytes+128)
+	for i := range bigBuf {
+		bigBuf[i] = 'a'
+	}
+	_ = os.WriteFile(filepath.Join(oversizedRepo, "huge.go"), bigBuf, 0o600)
+	if err := validator.VerifyRepoFileAndLine(oversizedRepo, "huge.go", 1); err == nil {
+		t.Fatalf("expected VerifyRepoFileAndLine to reject file exceeding MaxInputBytes")
+	}
 }

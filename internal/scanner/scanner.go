@@ -74,6 +74,13 @@ var manifestFilenames = map[string]bool{
 var entrypointTokens = []string{"router", "handler", "server", "api", "cmd/", "main."}
 var authBoundaryTokens = []string{"auth", "jwt", "oauth", "session", "middleware", "rbac", "acl", "policy"}
 
+var docExtensions = map[string]bool{
+	".md":   true,
+	".txt":  true,
+	".rst":  true,
+	".adoc": true,
+}
+
 type companionRule struct {
 	File   string
 	Reason string
@@ -195,16 +202,18 @@ func ScanRepository(targetDir string) RepoBrief {
 		}
 
 		lowerRel := strings.ToLower(rel)
-		if containsAny(lowerRel, entrypointTokens...) {
-			brief.EntrypointCandidates = appendCap(brief.EntrypointCandidates, rel, 20)
-		}
-		if containsAny(lowerRel, authBoundaryTokens...) {
-			brief.AuthBoundaryCandidates = appendCap(brief.AuthBoundaryCandidates, rel, 20)
-		}
+		if !docExtensions[ext] {
+			if containsAny(lowerRel, entrypointTokens...) {
+				brief.EntrypointCandidates = appendCap(brief.EntrypointCandidates, rel, 20)
+			}
+			if containsAny(lowerRel, authBoundaryTokens...) {
+				brief.AuthBoundaryCandidates = appendCap(brief.AuthBoundaryCandidates, rel, 20)
+			}
 
-		for i, rule := range companionRules {
-			if rule.Match(rel, lowerRel, name, ext) {
-				evidenceByCompanion[i] = appendCap(evidenceByCompanion[i], rel, 5)
+			for i, rule := range companionRules {
+				if rule.Match(rel, lowerRel, name, ext) {
+					evidenceByCompanion[i] = appendCap(evidenceByCompanion[i], rel, 5)
+				}
 			}
 		}
 		return nil

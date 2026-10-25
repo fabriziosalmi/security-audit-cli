@@ -125,4 +125,13 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 		t.Fatalf("expected unversioned ref on non-git dir, got %s", ref)
 	}
 	_ = IsGitIgnored(repo, filepath.Join(repo, "node_modules"))
+
+	// Documentation-only files (.md, .txt, .rst) must not trigger companion rules or entrypoint/auth candidates
+	docOnlyRepo := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(docOnlyRepo, "docs"), 0o755)
+	_ = os.WriteFile(filepath.Join(docOnlyRepo, "docs", "auth-session-rpc-tenant-mcp-ipc.md"), []byte("# Docs\n"), 0o600)
+	docBrief := ScanRepository(docOnlyRepo)
+	if len(docBrief.RecommendedCompanions) != 0 || len(docBrief.AuthBoundaryCandidates) != 0 || len(docBrief.EntrypointCandidates) != 0 {
+		t.Fatalf("expected documentation files to not trigger companion rules or boundary candidates, got: %+v", docBrief)
+	}
 }

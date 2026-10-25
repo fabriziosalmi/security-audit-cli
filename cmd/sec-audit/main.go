@@ -73,6 +73,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	profile := fs.String("profile", "", "Audit profile (quick, standard, deep)")
 	budget := fs.Int("budget", -1, "Optional total agent invocation budget")
 	scopePaths := fs.String("scope-paths", "", "Comma-separated repository-relative scope paths")
+	priorRunDirs := fs.String("prior-run-dirs", "", "Comma-separated prior audit run directories")
 	fileFlag := fs.String("file", "", "Companion file name or content file path")
 	blockFlag := fs.String("block", "", "Canonical block reference (e.g. ATTACK-CLASSES.md#Injection)")
 	contentFlag := fs.String("content", "", "Markdown content string")
@@ -83,7 +84,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	filesList := fs.String("files", "", "Comma-separated scratch-relative files to promote")
 	maxFileBytes := fs.Int64("max-file-bytes", 0, "Per-file promotion byte limit")
 	maxTotalBytes := fs.Int64("max-total-bytes", 0, "Cumulative promotion byte limit")
-	criticKind := fs.String("critic-kind", "post_wave", "Critic kind (post_wave or final_clean)")
+	criticKind := fs.String("critic-kind", "", "Critic kind (post_wave or final_clean)")
 	decision := fs.String("decision", "", "Verifier decision")
 	reason := fs.String("reason", "", "Reason for replacement or incomplete run")
 	ledgerPath := fs.String("ledger", "", "Direct path to coverage-ledger.json")
@@ -157,6 +158,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		payload["budget"] = *budget
 	}
 	setSliceIfNotEmpty("scope_paths", *scopePaths)
+	setSliceIfNotEmpty("prior_run_dirs", *priorRunDirs)
 	if sub == "catalog" {
 		setIfNotEmpty("file", *fileFlag)
 		setIfNotEmpty("block", *blockFlag)
@@ -185,6 +187,9 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	}
 	if sub == "critic-submit" {
 		setIfNotEmpty("critic_kind", *criticKind)
+		if _, ok := payload["critic_kind"]; !ok {
+			payload["critic_kind"] = "post_wave"
+		}
 	}
 	setIfNotEmpty("decision", *decision)
 	if sub == "render" {

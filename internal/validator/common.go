@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -317,9 +318,23 @@ func VerifyRepoFileAndLine(targetDir, relPath string, line int) error {
 		}
 		defer f.Close()
 
+		fstat, err := f.Stat()
+		if err != nil {
+			return fmt.Errorf("fstat %q: %w", relPath, err)
+		}
+		if !fstat.Mode().IsRegular() {
+			return fmt.Errorf("source path %q must be a regular file", relPath)
+		}
+		if fstat.Size() > MaxInputBytes {
+			return fmt.Errorf("source path %q exceeds %d byte limit", relPath, MaxInputBytes)
+		}
+
 		var buf bytes.Buffer
-		if _, err := buf.ReadFrom(f); err != nil {
+		if _, err := buf.ReadFrom(io.LimitReader(f, MaxInputBytes+1)); err != nil {
 			return fmt.Errorf("read %q: %w", relPath, err)
+		}
+		if int64(buf.Len()) > MaxInputBytes {
+			return fmt.Errorf("source path %q exceeds %d byte limit", relPath, MaxInputBytes)
 		}
 		content := buf.Bytes()
 		lineCount := bytes.Count(content, []byte{'\n'}) + 1

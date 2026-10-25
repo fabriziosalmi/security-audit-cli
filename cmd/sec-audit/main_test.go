@@ -102,6 +102,20 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 		t.Fatalf("artifact-promote flags failed: %v %s", err, string(rawP))
 	}
 
+	// Verify critic-submit preserves critic_kind from --input JSON when --critic-kind flag is omitted
+	criticInputFile := filepath.Join(tmpInputDir, "critic-final.json")
+	_ = os.WriteFile(criticInputFile, []byte(`{"output_dir":"/tmp/x","agent_id":"c-1","critic_kind":"final_clean","result":{"stop":true}}`), 0o600)
+	rawCriticJSON, err := parseSubcommandFlags("critic-submit", []string{"--input", criticInputFile}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(rawCriticJSON), `"critic_kind":"final_clean"`) {
+		t.Fatalf("expected critic-submit to preserve critic_kind=final_clean from --input JSON, got: %v %s", err, string(rawCriticJSON))
+	}
+
+	// Verify --prior-run-dirs flag is parsed into prior_run_dirs slice
+	rawInitPrior, err := parseSubcommandFlags("init", []string{"--target", target, "--prior-run-dirs", "/tmp/r1,/tmp/r2"}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(rawInitPrior), `"/tmp/r1"`) || !strings.Contains(string(rawInitPrior), `"/tmp/r2"`) {
+		t.Fatalf("expected init --prior-run-dirs to populate prior_run_dirs, got: %v %s", err, string(rawInitPrior))
+	}
+
 	// Validate returning valid: false should exit with code 1
 	badLedger := filepath.Join(tmpInputDir, "bad-ledger.json")
 	_ = os.WriteFile(badLedger, []byte(`[{"bad":1}]`), 0o600)
