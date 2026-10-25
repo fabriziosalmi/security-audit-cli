@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
@@ -95,7 +96,13 @@ func CompileHunter(outputDir, agentID string, assignedUnits, allUnits []validato
 			fmt.Fprintf(&b, "- Peer coverage_id (do not duplicate): `%s`\n", u.CoverageID)
 		}
 	}
-	for _, env := range state.Candidates {
+	candKeys := make([]string, 0, len(state.Candidates))
+	for fp := range state.Candidates {
+		candKeys = append(candKeys, fp)
+	}
+	sort.Strings(candKeys)
+	for _, fp := range candKeys {
+		env := state.Candidates[fp]
 		if env.HunterID == "prior-run-carryover" && env.ProposedVerdict == "confirmed" {
 			fmt.Fprintf(&b, "- Carried prior confirmed exclusion: `%s` (%s) — %s\n", env.Fingerprint, env.CandidateRecord.Title, env.CandidateRecord.RootCause)
 		}

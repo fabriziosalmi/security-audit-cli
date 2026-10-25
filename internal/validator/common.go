@@ -85,8 +85,8 @@ func IsVisibleText(s string, maxLen int) bool {
 
 func isLikelyNFC(s string) bool {
 	for _, r := range s {
-		// Reject combining diacritical marks that indicate NFD decomposed strings
-		if r >= 0x0300 && r <= 0x036F {
+		// Reject all Unicode nonspacing and enclosing combining marks (Mn, Me) that indicate NFD/NFKD decomposed strings
+		if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) {
 			return false
 		}
 	}
@@ -106,12 +106,20 @@ func IsCanonicalRef(s string) bool {
 	return isLikelyNFC(s)
 }
 
+const hexUpper = "0123456789ABCDEF"
+
 // EncodeCanonicalRef encodes UTF-8 bytes with RFC 3986 percent encoding.
 func EncodeCanonicalRef(s string) (string, error) {
 	if !IsCanonicalRef(s) {
 		return "", fmt.Errorf("invalid canonical reference %q", s)
 	}
 	var b strings.Builder
+	b.Grow(len(s) + 16)
+	writeEncodedRef(&b, s)
+	return b.String(), nil
+}
+
+func writeEncodedRef(b *strings.Builder, s string) {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		unreserved := (c >= 'A' && c <= 'Z') ||
@@ -121,27 +129,49 @@ func EncodeCanonicalRef(s string) (string, error) {
 		if unreserved {
 			b.WriteByte(c)
 		} else {
-			fmt.Fprintf(&b, "%%%02X", c)
+			b.WriteByte('%')
+			b.WriteByte(hexUpper[c>>4])
+			b.WriteByte(hexUpper[c&0x0F])
 		}
 	}
-	return b.String(), nil
 }
 
-// DeriveCoverageID computes the canonical coverage_id from CanonicalRefs.
+// DeriveCoverageID computes the canonical coverage_id from CanonicalRefs in a single Builder allocation.
 func DeriveCoverageID(refs CanonicalRefs) (string, error) {
-	parts := []string{refs.Surface, refs.Boundary, refs.Subsystem, refs.AttackClass}
+	if !IsCanonicalRef(refs.Surface) {
+		return "", fmt.Errorf("invalid canonical reference %q", refs.Surface)
+	}
+	if !IsCanonicalRef(refs.Boundary) {
+		return "", fmt.Errorf("invalid canonical reference %q", refs.Boundary)
+	}
+	if !IsCanonicalRef(refs.Subsystem) {
+		return "", fmt.Errorf("invalid canonical reference %q", refs.Subsystem)
+	}
+	if !IsCanonicalRef(refs.AttackClass) {
+		return "", fmt.Errorf("invalid canonical reference %q", refs.AttackClass)
+	}
+	if refs.Lifecycle != nil && !IsCanonicalRef(*refs.Lifecycle) {
+		return "", fmt.Errorf("invalid canonical reference %q", *refs.Lifecycle)
+	}
+
+	n := len(refs.Surface) + len(refs.Boundary) + len(refs.Subsystem) + len(refs.AttackClass) + 32
 	if refs.Lifecycle != nil {
-		parts = append(parts, *refs.Lifecycle)
+		n += len(*refs.Lifecycle) + 8
 	}
-	encoded := make([]string, len(parts))
-	for i, p := range parts {
-		enc, err := EncodeCanonicalRef(p)
-		if err != nil {
-			return "", err
-		}
-		encoded[i] = enc
+	var b strings.Builder
+	b.Grow(n)
+	writeEncodedRef(&b, refs.Surface)
+	b.WriteString("::")
+	writeEncodedRef(&b, refs.Boundary)
+	b.WriteString("::")
+	writeEncodedRef(&b, refs.Subsystem)
+	b.WriteString("::")
+	writeEncodedRef(&b, refs.AttackClass)
+	if refs.Lifecycle != nil {
+		b.WriteString("::")
+		writeEncodedRef(&b, *refs.Lifecycle)
 	}
-	return strings.Join(encoded, "::"), nil
+	return b.String(), nil
 }
 
 // IsSafeRelativePath mirrors isSafeRelativePath / isSafeRelativeSourcePath.

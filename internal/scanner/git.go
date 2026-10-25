@@ -16,6 +16,9 @@ import (
 
 // ResolveGitRef returns the HEAD commit hash (or "unversioned") and whether the worktree is dirty.
 func ResolveGitRef(targetDir string) (string, bool) {
+	if _, err := os.Stat(filepath.Join(targetDir, ".git")); err != nil {
+		return "unversioned", false
+	}
 	cmd := exec.Command("git", "-C", targetDir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	ref := "unversioned"

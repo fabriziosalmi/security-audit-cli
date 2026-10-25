@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 //go:embed assets/*
@@ -38,8 +39,7 @@ type Catalog struct {
 	SchemaJSON map[string]any
 }
 
-// LoadCatalog parses all embedded assets into a deterministic Catalog.
-func LoadCatalog() (*Catalog, error) {
+var loadCatalogOnce = sync.OnceValues(func() (*Catalog, error) {
 	cat := &Catalog{
 		Files:     make(map[string]*CompanionFile),
 		Blocks:    make(map[string]*Block),
@@ -67,6 +67,11 @@ func LoadCatalog() (*Catalog, error) {
 		}
 	}
 	return cat, nil
+})
+
+// LoadCatalog returns the immutable embedded Catalog (parsed once via sync.OnceValues).
+func LoadCatalog() (*Catalog, error) {
+	return loadCatalogOnce()
 }
 
 func parseMarkdownCompanion(filename, content string) (*CompanionFile, []*Block) {

@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/report"
+	"github.com/fabriziosalmi/security-audit-cli/internal/scanner"
 	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
 	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
@@ -165,6 +167,31 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 		return nil, err
 	}
 
+	// Build cryptographic SHA-256 integrity manifest (sha256sum -c compatible)
+	manifestFiles := []string{
+		"run-metadata.json",
+		"architecture.md",
+		"coverage-ledger.json",
+		"findings.json",
+		"REPORT.md",
+		"FINDINGS-DETAIL.md",
+		"NEEDS-VALIDATION.md",
+		"findings.sarif",
+	}
+	hashes := make(map[string]string, len(manifestFiles))
+	var manifestBuilder strings.Builder
+	for _, fname := range manifestFiles {
+		fpath := filepath.Join(req.OutputDir, fname)
+		if h, herr := scanner.FileHashSHA256(fpath); herr == nil {
+			hashes[fname] = h
+			fmt.Fprintf(&manifestBuilder, "%s  %s\n", h, fname)
+		}
+	}
+	manifestPath := filepath.Join(req.OutputDir, "manifest.sha256")
+	if err := store.WriteFileAtomic(manifestPath, []byte(manifestBuilder.String()), 0o600); err != nil {
+		return nil, err
+	}
+
 	if unvalidatedFPs == nil {
 		unvalidatedFPs = []string{}
 	}
@@ -175,6 +202,8 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 		FindingsDetailPath:  detailPath,
 		NeedsValidationPath: needsValPath,
 		SarifPath:           sarifPath,
+		ManifestPath:        manifestPath,
+		ArtifactHashes:      hashes,
 		ConfirmedCount:      len(confirmed),
 		NeedsValCount:       len(needsVal),
 		RejectedCount:       len(rejected),

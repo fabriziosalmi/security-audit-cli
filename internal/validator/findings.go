@@ -94,6 +94,11 @@ func ValidateFindingsBytes(raw []byte, targetDir string) []string {
 		}
 	}
 
+	if err := ValidateJSONPreflight(raw); err != nil {
+		addErr(err.Error())
+		return errs
+	}
+
 	var rawList []map[string]any
 	if err := json.Unmarshal(raw, &rawList); err != nil {
 		var anyVal any

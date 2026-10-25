@@ -187,17 +187,19 @@ type RenderRequest struct {
 	IncompleteReason string `json:"incomplete_reason,omitempty"`
 }
 
-// RenderResponse lists the generated Phase 6 artifact paths and terminal run status.
+// RenderResponse lists the generated Phase 6 artifact paths, cryptographic SHA-256 manifest, and terminal run status.
 type RenderResponse struct {
-	RunStatus           string   `json:"run_status"`
-	IncompleteReason    string   `json:"incomplete_reason,omitempty"`
-	ReportPath          string   `json:"report_path"`
-	FindingsDetailPath  string   `json:"findings_detail_path"`
-	NeedsValidationPath string   `json:"needs_validation_path"`
-	SarifPath           string   `json:"sarif_path"`
-	ConfirmedCount      int      `json:"confirmed_count"`
-	NeedsValCount       int      `json:"needs_validation_count"`
-	RejectedCount       int      `json:"rejected_count"`
-	HardeningCount      int      `json:"hardening_count"`
-	UnvalidatedFPs      []string `json:"unvalidated_fingerprints"`
+	RunStatus           string            `json:"run_status"`
+	IncompleteReason    string            `json:"incomplete_reason,omitempty"`
+	ReportPath          string            `json:"report_path"`
+	FindingsDetailPath  string            `json:"findings_detail_path"`
+	NeedsValidationPath string            `json:"needs_validation_path"`
+	SarifPath           string            `json:"sarif_path"`
+	ManifestPath        string            `json:"manifest_path"`
+	ArtifactHashes      map[string]string `json:"artifact_hashes"`
+	ConfirmedCount      int               `json:"confirmed_count"`
+	NeedsValCount       int               `json:"needs_validation_count"`
+	RejectedCount       int               `json:"rejected_count"`
+	HardeningCount      int               `json:"hardening_count"`
+	UnvalidatedFPs      []string          `json:"unvalidated_fingerprints"`
 }
