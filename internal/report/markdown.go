@@ -9,7 +9,14 @@ import (
 )
 
 // BuildReportMD generates the 7-section deterministic REPORT.md defined by VALIDATION-AND-REPORTING.md.
-func BuildReportMD(meta *store.RunMetadata, state *store.InternalState, units []validator.CoverageUnit, counts map[string]int, confirmed, needsVal, rejected []validator.Finding, unvalidatedFPs, unverifiedP5 []string) string {
+func BuildReportMD(
+	meta *store.RunMetadata,
+	state *store.InternalState,
+	units []validator.CoverageUnit,
+	counts map[string]int,
+	confirmed, needsVal, rejected []validator.Finding,
+	unvalidatedFPs, unverifiedP5 []string,
+) string {
 	var b strings.Builder
 	b.WriteString("# Security Audit Report\n\n")
 
@@ -32,14 +39,21 @@ func BuildReportMD(meta *store.RunMetadata, state *store.InternalState, units []
 	} else {
 		fmt.Fprintf(&b, "- **Agents Spent**: %d (unbounded budget)\n", meta.AgentsSpent)
 	}
-	fmt.Fprintf(&b, "- **Execution Policy**: `%s` (read-only target inspection and bounded local sandbox checks only; no live or shared endpoints probed)\n", meta.ExecutionPolicy)
+	fmt.Fprintf(
+		&b,
+		"- **Execution Policy**: `%s` (read-only target inspection and bounded local sandbox checks only; "+
+			"no live or shared endpoints probed)\n",
+		meta.ExecutionPolicy,
+	)
 	if len(meta.PriorRunPaths) == 0 {
 		b.WriteString("- **Prior Runs**: No prior coverage ledger was used. A single pass does not exhaust the target.\n")
 	} else {
 		fmt.Fprintf(&b, "- **Prior Runs Evaluated**: `%s`\n", strings.Join(meta.PriorRunPaths, "`, `"))
 	}
-	if meta.Profile == "quick" || len(meta.ScopePaths) > 0 || meta.RunStatus == "incomplete" || counts["deferred"] > 0 || counts["out_of_scope"] > 0 {
-		b.WriteString("\n> **Coverage Disclosure**: This run represents a partial pass. See the Coverage Summary section for deferred, blocked, or out-of-scope units.\n")
+	if meta.Profile == "quick" || len(meta.ScopePaths) > 0 ||
+		meta.RunStatus == "incomplete" || counts["deferred"] > 0 || counts["out_of_scope"] > 0 {
+		b.WriteString("\n> **Coverage Disclosure**: This run represents a partial pass. " +
+			"See the Coverage Summary section for deferred, blocked, or out-of-scope units.\n")
 	}
 	if len(unvalidatedFPs) > 0 || len(unverifiedP5) > 0 {
 		b.WriteString("\n### Unvalidated / Unverified Ledger Candidates (Not Confirmed Findings)\n\n")
@@ -54,8 +68,13 @@ func BuildReportMD(meta *store.RunMetadata, state *store.InternalState, units []
 
 	// Section 2: Security Posture Summary
 	b.WriteString("## 2. Security Posture Summary\n\n")
-	fmt.Fprintf(&b, "This audit confirmed **%d** source-grounded vulnerability record(s), recorded **%d** blocked lead(s) requiring validation (`needs_validation`), and refuted **%d** candidate hypothesis/hypotheses (`rejected`) across **%d** deterministic coverage unit(s).\n\n",
-		len(confirmed), len(needsVal), len(rejected), len(units))
+	fmt.Fprintf(
+		&b,
+		"This audit confirmed **%d** source-grounded vulnerability record(s), "+
+			"recorded **%d** blocked lead(s) requiring validation (`needs_validation`), "+
+			"and refuted **%d** candidate hypothesis/hypotheses (`rejected`) across **%d** deterministic coverage unit(s).\n\n",
+		len(confirmed), len(needsVal), len(rejected), len(units),
+	)
 
 	// Section 3: Confirmed Findings Table
 	b.WriteString("## 3. Confirmed Findings Summary\n\n")
@@ -90,7 +109,7 @@ func BuildReportMD(meta *store.RunMetadata, state *store.InternalState, units []
 	}
 
 	// Section 5: Needs Validation Table (strictly no severity)
-	b.WriteString("## 5. Needs Validation Leads (Unresolved Blockers — No Severity Assigned)\n\n")
+	b.WriteString("## 5. Needs Validation Leads (Unresolved Blockers: No Severity Assigned)\n\n")
 	if len(needsVal) == 0 {
 		b.WriteString("No unresolved `needs_validation` leads remain.\n\n")
 	} else {
@@ -198,7 +217,8 @@ func BuildFindingsDetailMD(confirmed []validator.Finding) string {
 func BuildNeedsValidationMD(needsVal []validator.Finding) string {
 	var b strings.Builder
 	b.WriteString("# Needs Validation Leads\n\n")
-	b.WriteString("> These records represent source-grounded hypotheses blocked by a missing local capability or unobserved deployment fact. They carry **no severity**.\n\n")
+	b.WriteString("> These records represent source-grounded hypotheses blocked by a missing local capability " +
+		"or unobserved deployment fact. They carry **no severity**.\n\n")
 	if len(needsVal) == 0 {
 		b.WriteString("No unresolved `needs_validation` records in this run.\n")
 		return b.String()

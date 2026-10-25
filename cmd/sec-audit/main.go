@@ -208,7 +208,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "sec-audit — Deterministic 6-Phase Security Audit CLI & MCP Server (1:1 parity)")
+	fmt.Fprintln(w, "sec-audit: Deterministic 6-Phase Security Audit CLI & MCP Server (1:1 parity)")
 	fmt.Fprintln(w, "\nUsage:")
 	fmt.Fprintln(w, "  sec-audit <subcommand> [flags]")
 	fmt.Fprintln(w, "  sec-audit mcp")

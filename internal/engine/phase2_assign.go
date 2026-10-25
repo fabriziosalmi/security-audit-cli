@@ -16,7 +16,10 @@ import (
 // creates isolated scratch/ and artifacts/ directories, updates ledger state, and compiles the exact prompt.
 func AssignAgent(req AssignAgentRequest) (*AssignAgentResponse, error) {
 	if !validator.IsSafeAgentID(req.AgentID) {
-		return nil, fmt.Errorf("invalid canonical agent_id %q (must match ^[a-z0-9][a-z0-9_-]{0,63}$ and not be a reserved device name)", req.AgentID)
+		return nil, fmt.Errorf(
+			"invalid canonical agent_id %q (must match ^[a-z0-9][a-z0-9_-]{0,63}$ and not be a reserved device name)",
+			req.AgentID,
+		)
 	}
 	rs := store.New(req.OutputDir)
 	meta, err := rs.LoadMetadata()
@@ -161,18 +164,31 @@ func enforceAdversarialSeparation(req AssignAgentRequest, state *InternalState) 
 			return fmt.Errorf("adversarial isolation violation: record_verifier %q cannot equal hunter_id %q", req.AgentID, env.HunterID)
 		}
 		if req.AgentID == env.Phase3VerifierID {
-			return fmt.Errorf("adversarial isolation violation: record_verifier %q cannot equal phase3_verifier_id %q", req.AgentID, env.Phase3VerifierID)
+			return fmt.Errorf(
+				"adversarial isolation violation: record_verifier %q cannot equal phase3_verifier_id %q",
+				req.AgentID, env.Phase3VerifierID,
+			)
 		}
 		for _, prevP5 := range env.Phase5VerifierIDs {
 			if req.AgentID == prevP5 {
-				return fmt.Errorf("adversarial isolation violation: record_verifier %q already participated in Phase 5 for %q", req.AgentID, req.Fingerprint)
+				return fmt.Errorf(
+					"adversarial isolation violation: record_verifier %q already participated in Phase 5 for %q",
+					req.AgentID, req.Fingerprint,
+				)
 			}
 		}
 	}
 	return nil
 }
 
-func buildRolePrompt(req AssignAgentRequest, rs *store.RunStore, meta *RunMetadata, state *InternalState, units []validator.CoverageUnit, cat *spec.Catalog) (string, error) {
+func buildRolePrompt(
+	req AssignAgentRequest,
+	rs *store.RunStore,
+	meta *RunMetadata,
+	state *InternalState,
+	units []validator.CoverageUnit,
+	cat *spec.Catalog,
+) (string, error) {
 	switch req.Role {
 	case "hunter":
 		if len(req.CoverageIDs) == 0 {

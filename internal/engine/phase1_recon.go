@@ -59,7 +59,11 @@ func Init(req InitRequest) (*InitResponse, error) {
 	// Enforce target-containment safety rule from SKILL.md
 	if scanner.IsSubpath(absTarget, outputDir) {
 		if !scanner.IsGitIgnored(absTarget, outputDir) {
-			return nil, fmt.Errorf("output_dir %q is inside target %q and is not ignored by version control; choose an external path or add it to .gitignore", outputDir, absTarget)
+			return nil, fmt.Errorf(
+				"output_dir %q is inside target %q and is not ignored by version control; "+
+					"choose an external path or add it to .gitignore",
+				outputDir, absTarget,
+			)
 		}
 	}
 

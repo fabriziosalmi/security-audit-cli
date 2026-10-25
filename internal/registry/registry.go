@@ -42,7 +42,8 @@ var commands = []Command{
 	newCommand(
 		"init",
 		"Phase 1 setup, budget gate, static repo brief, prior-run carryover",
-		"Phase 1 setup: initialize audit run, enforce pre-reconnaissance budget gate, run deterministic static repo scan, and evaluate prior runs.",
+		"Phase 1 setup: initialize audit run, enforce pre-reconnaissance budget gate, "+
+			"run deterministic static repo scan, and evaluate prior runs.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -60,7 +61,8 @@ var commands = []Command{
 	newCommand(
 		"catalog",
 		"Inspect embedded attack-class & companion playbooks and blocks",
-		"Query embedded attack-class and companion Markdown files or extract verbatim block content by canonical reference (e.g. ATTACK-CLASSES.md#Access control).",
+		"Query embedded attack-class and companion Markdown files or extract verbatim "+
+			"block content by canonical reference (e.g. ATTACK-CLASSES.md#Access control).",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -91,7 +93,8 @@ var commands = []Command{
 	newCommand(
 		"ledger-seed",
 		"Derive canonical RFC 3986 coverage_ids, verify paths/blocks, seed ledger",
-		"Phase 1 coverage plan: derive canonical RFC 3986 coverage_ids, verify starting_paths on disk and block references against catalog, sort, validate, and write coverage-ledger.json.",
+		"Phase 1 coverage plan: derive canonical RFC 3986 coverage_ids, verify starting_paths "+
+			"on disk and block references against catalog, sort, validate, and write coverage-ledger.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -107,7 +110,9 @@ var commands = []Command{
 	newCommand(
 		"agent-assign",
 		"Enforce adversarial isolation & budget reserves, create scratch/artifacts, compile prompt",
-		"Phases 1/2/3/5 orchestration: validate fresh canonical agent_id, enforce budget reserves and adversarial separation (verifier != hunter, record_verifier != hunter/verifier), create isolated scratch/ and artifacts/ directories, and compile the exact verbatim prompt.",
+		"Phases 1/2/3/5 orchestration: validate fresh canonical agent_id, enforce budget reserves "+
+			"and adversarial separation (verifier != hunter, record_verifier != hunter/verifier), "+
+			"create isolated scratch/ and artifacts/ directories, and compile the exact verbatim prompt.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -124,7 +129,8 @@ var commands = []Command{
 	newCommand(
 		"artifact-promote",
 		"Execute 11-step OS race-safe O_NOFOLLOW promotion from scratch/ to artifacts/",
-		"Execute the 11-step OS race-safe descriptor-relative promotion from agents/<agent-id>/scratch/ to agents/<agent-id>/artifacts/ with O_NOFOLLOW, Fstat link-count=1, and byte bounds.",
+		"Execute the 11-step OS race-safe descriptor-relative promotion from "+
+			"agents/<agent-id>/scratch/ to agents/<agent-id>/artifacts/ with O_NOFOLLOW, Fstat link-count=1, and byte bounds.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -143,7 +149,8 @@ var commands = []Command{
 	newCommand(
 		"hunter-submit",
 		"Verify source file:line citations on disk and update coverage-ledger.json",
-		"Phase 2 ingestion: verify hunter unit dispositions, verify all trace/evidence file:line citations on disk in target repository, validate promoted artifacts, and update coverage-ledger.json.",
+		"Phase 2 ingestion: verify hunter unit dispositions, verify all trace/evidence file:line "+
+			"citations on disk in target repository, validate promoted artifacts, and update coverage-ledger.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -160,7 +167,8 @@ var commands = []Command{
 	newCommand(
 		"critic-submit",
 		"Archive reopened attempts, add missing units, advance hunting wave",
-		"Phase 2 coverage-critic ingestion: add missing coverage units, archive reopened units into attempts[] with reassignment_reason, increment wave, and validate coverage-ledger.json.",
+		"Phase 2 coverage-critic ingestion: add missing coverage units, archive reopened units "+
+			"into attempts[] with reassignment_reason, increment wave, and validate coverage-ledger.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -178,7 +186,8 @@ var commands = []Command{
 	newCommand(
 		"verifier-submit",
 		"Enforce verifier != hunter, verify source trace on disk, update findings.json",
-		"Phase 3/4 candidate validation: enforce adversarial isolation (verifier != hunter), verify all cited source files/lines on disk, update linked ledger checks, and write sorted findings.json.",
+		"Phase 3/4 candidate validation: enforce adversarial isolation (verifier != hunter), "+
+			"verify all cited source files/lines on disk, update linked ledger checks, and write sorted findings.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -196,7 +205,8 @@ var commands = []Command{
 	newCommand(
 		"record-verify-submit",
 		"Enforce 3-way adversarial independence & material-replacement gate (Phase 5)",
-		"Phase 5 independent record verification: enforce 3-way adversarial independence, detect material replacements that require another fresh independent verifier, and update findings.json.",
+		"Phase 5 independent record verification: enforce 3-way adversarial independence, detect "+
+			"material replacements that require another fresh independent verifier, and update findings.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -214,7 +224,8 @@ var commands = []Command{
 	newCommand(
 		"validate",
 		"Validate coverage-ledger.json, findings.json, and source paths on disk",
-		"Run deterministic validators on coverage-ledger.json and findings.json, plus source-file and line-number existence verification against the target repository.",
+		"Run deterministic validators on coverage-ledger.json and findings.json, plus "+
+			"source-file and line-number existence verification against the target repository.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -253,7 +264,8 @@ var commands = []Command{
 	newCommand(
 		"render",
 		"Deterministically generate REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, findings.sarif",
-		"Phase 6 deterministic reporting: enforce terminal verification gate and generate REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, and findings.sarif.",
+		"Phase 6 deterministic reporting: enforce terminal verification gate and generate "+
+			"REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, and findings.sarif.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{

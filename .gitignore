@@ -1,4 +1,20 @@
+# Go binaries and test outputs
 /sec-audit
+/sec-audit.exe
 *.test
 *.out
+coverage.txt
+coverage.html
+dist/
+
+# IDE and OS artifacts
 .DS_Store
+.idea/
+.vscode/
+.claude/
+*.log
+
+# Environment and local files
+.env
+.env.*
+/*.pdf

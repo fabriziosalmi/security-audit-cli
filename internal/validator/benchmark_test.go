@@ -28,7 +28,8 @@ func TestJSONPreflightDuplicateKeyAndDepthBreakTests(t *testing.T) {
 
 	// Break-test 2: Nested duplicate key inside severity object MUST be rejected!
 	nestedDup := `[{"verdict": "confirmed", "severity": {"overall_severity": "low", "overall_severity": "critical"}}]`
-	if err := validator.ValidateJSONPreflight([]byte(nestedDup)); err == nil || !strings.Contains(err.Error(), `duplicate JSON object key "overall_severity"`) {
+	if err := validator.ValidateJSONPreflight([]byte(nestedDup)); err == nil ||
+		!strings.Contains(err.Error(), `duplicate JSON object key "overall_severity"`) {
 		t.Fatalf("Break-test failed: nested duplicate JSON key not caught! got: %v", err)
 	}
 
@@ -156,7 +157,10 @@ func BenchmarkValidateFindings(b *testing.B) {
 }
 
 func FuzzValidateFindingsBytes(f *testing.F) {
-	f.Add([]byte(`[{"verdict":"rejected","fingerprint":"F-1","title":"t","description":"d","claimed_root_cause":"c","trace":[{"kind":"sink","file":"a.go","line":1,"scope":"s","description":"d"}],"evidence":[{"file":"a.go","line":1,"description":"d"}],"reason":"r"}]`))
+	seedRej := `[{"verdict":"rejected","fingerprint":"F-1","title":"t","description":"d",` +
+		`"claimed_root_cause":"c","trace":[{"kind":"sink","file":"a.go","line":1,"scope":"s","description":"d"}],` +
+		`"evidence":[{"file":"a.go","line":1,"description":"d"}],"reason":"r"}]`
+	f.Add([]byte(seedRej))
 	f.Add([]byte(`[{"verdict":"rejected","verdict":"confirmed"}]`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_ = validator.ValidateFindingsBytes(data, "")

@@ -125,21 +125,21 @@ type ValidationPlan struct {
 
 // Finding represents a unified record in findings.json (confirmed, needs_validation, or rejected).
 type Finding struct {
-	Verdict           string           `json:"verdict"`
-	Fingerprint       string           `json:"fingerprint"`
-	Title             string           `json:"title"`
-	Description       string           `json:"description"`
-	RootCause         string           `json:"root_cause,omitempty"`
-	ClaimedRootCause  string           `json:"claimed_root_cause,omitempty"`
-	IntendedBehavior  string           `json:"intended_behavior,omitempty"`
-	Trace             []TraceEntry     `json:"trace"`
-	Evidence          []EvidenceEntry  `json:"evidence"`
-	Conditions        []ConditionEntry `json:"conditions,omitempty"`
-	Execution         *ExecutionBlock  `json:"execution,omitempty"`
-	Remediation       *RemediationBlock `json:"remediation,omitempty"`
-	Severity          *SeverityBlock   `json:"severity,omitempty"`
-	Confidence        *ScoreReason     `json:"confidence,omitempty"`
-	Blockers          []string         `json:"blockers,omitempty"`
-	ValidationPlan    *ValidationPlan  `json:"validation_plan,omitempty"`
-	Reason            string           `json:"reason,omitempty"`
+	Verdict          string            `json:"verdict"`
+	Fingerprint      string            `json:"fingerprint"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	RootCause        string            `json:"root_cause,omitempty"`
+	ClaimedRootCause string            `json:"claimed_root_cause,omitempty"`
+	IntendedBehavior string            `json:"intended_behavior,omitempty"`
+	Trace            []TraceEntry      `json:"trace"`
+	Evidence         []EvidenceEntry   `json:"evidence"`
+	Conditions       []ConditionEntry  `json:"conditions,omitempty"`
+	Execution        *ExecutionBlock   `json:"execution,omitempty"`
+	Remediation      *RemediationBlock `json:"remediation,omitempty"`
+	Severity         *SeverityBlock    `json:"severity,omitempty"`
+	Confidence       *ScoreReason      `json:"confidence,omitempty"`
+	Blockers         []string          `json:"blockers,omitempty"`
+	ValidationPlan   *ValidationPlan   `json:"validation_plan,omitempty"`
+	Reason           string            `json:"reason,omitempty"`
 }

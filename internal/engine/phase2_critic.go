@@ -55,7 +55,10 @@ func SubmitCritic(outputDir, agentID, criticKind string, result CriticResult) (m
 			continue
 		}
 		if u.Status != "covered" && u.Status != "candidate" && u.Status != "blocked" {
-			return nil, fmt.Errorf("cannot archive and reassign unit %q with status %q (must be covered, candidate, or blocked)", u.CoverageID, u.Status)
+			return nil, fmt.Errorf(
+				"cannot archive and reassign unit %q with status %q (must be covered, candidate, or blocked)",
+				u.CoverageID, u.Status,
+			)
 		}
 		arch := validator.ArchivedAttempt{
 			Wave:               u.Wave,

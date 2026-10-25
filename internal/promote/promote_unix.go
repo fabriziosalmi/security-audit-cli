@@ -59,7 +59,12 @@ func PromoteAllowlist(outputDir, agentID string, relPaths []string, maxFileBytes
 	return results, nil
 }
 
-func promoteOne(scratchRoot, artifactsRoot *os.Root, agentID, rel string, maxFileBytes, maxTotalBytes int64, cumulative *int64) PromotedArtifact {
+func promoteOne(
+	scratchRoot, artifactsRoot *os.Root,
+	agentID, rel string,
+	maxFileBytes, maxTotalBytes int64,
+	cumulative *int64,
+) PromotedArtifact {
 	fail := func(reason string) PromotedArtifact {
 		return PromotedArtifact{
 			ScratchPath: rel,
@@ -165,7 +170,8 @@ func promoteOne(scratchRoot, artifactsRoot *os.Root, agentID, rel string, maxFil
 	if err := syscall.Fstat(int(srcFile.Fd()), &st2); err != nil {
 		return fail(fmt.Sprintf("second fstat failed: %v", err))
 	}
-	if st1.Dev != st2.Dev || st1.Ino != st2.Ino || st1.Mode != st2.Mode || st2.Nlink != 1 || st1.Size != st2.Size || st1.Mtimespec != st2.Mtimespec {
+	if st1.Dev != st2.Dev || st1.Ino != st2.Ino || st1.Mode != st2.Mode ||
+		st2.Nlink != 1 || st1.Size != st2.Size || st1.Mtimespec != st2.Mtimespec {
 		return fail("scratch file changed identity, type, link count, size, or mtime during promotion")
 	}
 

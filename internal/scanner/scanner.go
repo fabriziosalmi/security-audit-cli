@@ -127,7 +127,8 @@ var companionRules = []companionRule{
 		File:   "CLOUD-AND-DEPLOYMENT.md",
 		Reason: "Container, IaC, Kubernetes, or edge deployment manifests detected",
 		Match: func(_, lowerRel, name, ext string) bool {
-			return extLanguageMap[ext] == "terraform" || name == "Dockerfile" || name == "wrangler.toml" || containsAny(lowerRel, "k8s/", "helm/", "wrangler")
+			return extLanguageMap[ext] == "terraform" || name == "Dockerfile" ||
+				name == "wrangler.toml" || containsAny(lowerRel, "k8s/", "helm/", "wrangler")
 		},
 	},
 	{

@@ -126,7 +126,16 @@ func validateReviewedPathOwnership(reviewedPaths []string, checks []LocalCheck, 
 	}
 }
 
-func validateStateInvariants(status string, agentID *string, reviewedPaths []string, checks []LocalCheck, fingerprints []string, unresolved []string, base string, errs *[]string) {
+func validateStateInvariants(
+	status string,
+	agentID *string,
+	reviewedPaths []string,
+	checks []LocalCheck,
+	fingerprints []string,
+	unresolved []string,
+	base string,
+	errs *[]string,
+) {
 	addErr := func(msg string) {
 		if len(*errs) < MaxValidationErrors {
 			*errs = append(*errs, msg)
@@ -236,7 +245,10 @@ func validateAttempts(attempts []ArchivedAttempt, u CoverageUnit, base string, e
 		if !IsVisibleText(att.ReassignmentReason, 0) {
 			addErr(fmt.Sprintf("%s.reassignment_reason: invalid text", attBase))
 		}
-		validateStateInvariants(att.Status, att.AgentID, att.ReviewedPaths, att.LocalChecks, att.ResultFingerprints, att.Unresolved, attBase, errs)
+		validateStateInvariants(
+			att.Status, att.AgentID, att.ReviewedPaths,
+			att.LocalChecks, att.ResultFingerprints, att.Unresolved, attBase, errs,
+		)
 
 		for cIdx, c := range att.LocalChecks {
 			if priorOwners[c.AgentID] {

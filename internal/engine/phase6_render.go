@@ -106,7 +106,11 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 	sort.Strings(unverifiedPhase5FPs)
 
 	if (len(unvalidatedFPs) > 0 || len(unverifiedPhase5FPs) > 0) && meta.RunStatus != "incomplete" {
-		return nil, fmt.Errorf("cannot mark run complete: unvalidated candidates=%v, unverified Phase 5 records=%v (pass incomplete_reason if budget exhausted)", unvalidatedFPs, unverifiedPhase5FPs)
+		return nil, fmt.Errorf(
+			"cannot mark run complete: unvalidated candidates=%v, unverified Phase 5 records=%v "+
+				"(pass incomplete_reason if budget exhausted)",
+			unvalidatedFPs, unverifiedPhase5FPs,
+		)
 	}
 
 	var confirmed, needsVal, rejected []validator.Finding
@@ -131,7 +135,10 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 	}
 	if statusCounts["planned"] > 0 || statusCounts["in_progress"] > 0 {
 		if meta.RunStatus != "incomplete" {
-			return nil, fmt.Errorf("cannot render complete report while %d planned and %d in_progress units remain", statusCounts["planned"], statusCounts["in_progress"])
+			return nil, fmt.Errorf(
+				"cannot render complete report while %d planned and %d in_progress units remain",
+				statusCounts["planned"], statusCounts["in_progress"],
+			)
 		}
 	} else if meta.RunStatus != "incomplete" {
 		meta.RunStatus = "complete"

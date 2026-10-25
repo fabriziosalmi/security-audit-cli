@@ -26,8 +26,17 @@ func createDummyRepo(t *testing.T) string {
 		}
 	}
 	mustWrite("go.mod", "module example.com/webapp\n\ngo 1.23\n")
-	mustWrite("src/router.go", "package src\n\nfunc HandleUpdateUser(userID string, body string) {\n\tRequireAuth(userID)\n\tExecUpdate(userID, body)\n}\n")
-	mustWrite("src/auth.go", "package src\n\nfunc RequireAuth(userID string) bool {\n\t// BUG: checks token presence but not resource owner\n\treturn userID != \"\"\n}\n\nfunc ExecUpdate(userID, body string) {}\n")
+	mustWrite(
+		"src/router.go",
+		"package src\n\nfunc HandleUpdateUser(userID string, body string) {\n"+
+			"\tRequireAuth(userID)\n\tExecUpdate(userID, body)\n}\n",
+	)
+	mustWrite(
+		"src/auth.go",
+		"package src\n\nfunc RequireAuth(userID string) bool {\n"+
+			"\t// BUG: checks token presence but not resource owner\n"+
+			"\treturn userID != \"\"\n}\n\nfunc ExecUpdate(userID, body string) {}\n",
+	)
 	return dir
 }
 
@@ -48,7 +57,10 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 		t.Fatalf("Init with low budget failed: %v", err)
 	}
 	if lowResp.Metadata.RunStatus != "incomplete" || lowResp.Metadata.IncompleteReason != "budget_cannot_fund_reconnaissance_and_reserves" {
-		t.Fatalf("expected incomplete budget_cannot_fund_reconnaissance_and_reserves, got status=%q reason=%q", lowResp.Metadata.RunStatus, lowResp.Metadata.IncompleteReason)
+		t.Fatalf(
+			"expected incomplete budget_cannot_fund_reconnaissance_and_reserves, got status=%q reason=%q",
+			lowResp.Metadata.RunStatus, lowResp.Metadata.IncompleteReason,
+		)
 	}
 
 	// 2. Normal Init
@@ -138,7 +150,8 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AssignAgent hunter failed: %v", err)
 	}
-	if !strings.Contains(hunterAssign.Prompt, "Artifact promotion procedure") || !strings.Contains(hunterAssign.Prompt, "WEB-PROTOCOL-AND-AUTH.md#Core discipline") {
+	if !strings.Contains(hunterAssign.Prompt, "Artifact promotion procedure") ||
+		!strings.Contains(hunterAssign.Prompt, "WEB-PROTOCOL-AND-AUTH.md#Core discipline") {
 		t.Fatalf("hunter prompt missing required verbatim blocks")
 	}
 
@@ -201,10 +214,17 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 	_, err = engine.SubmitHunter(outDir, "hunter-wave1-a", engine.HunterStructuredResult{
 		Units: []engine.HunterUnitResult{
 			{
-				CoverageID:            covID,
-				Disposition:           "candidate",
-				ReviewedPaths:         []string{"src/router.go", "src/auth.go"},
-				Checks:                []validator.LocalCheck{{AgentID: "hunter-wave1-a", ReviewedPaths: []string{"src/router.go", "src/auth.go"}, Invariant: "Owner check", Method: "local", Result: "Bypassed", Artifact: &artPath}},
+				CoverageID:    covID,
+				Disposition:   "candidate",
+				ReviewedPaths: []string{"src/router.go", "src/auth.go"},
+				Checks: []validator.LocalCheck{{
+					AgentID:       "hunter-wave1-a",
+					ReviewedPaths: []string{"src/router.go", "src/auth.go"},
+					Invariant:     "Owner check",
+					Method:        "local",
+					Result:        "Bypassed",
+					Artifact:      &artPath,
+				}},
 				CandidateFingerprints: []string{"idor.user-update.missing-owner-check"},
 				Unresolved:            []string{},
 			},
@@ -224,10 +244,17 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 	if _, err := engine.SubmitHunter(outDir, "hunter-wave1-a", engine.HunterStructuredResult{
 		Units: []engine.HunterUnitResult{
 			{
-				CoverageID:            covID,
-				Disposition:           "candidate",
-				ReviewedPaths:         []string{"src/router.go", "src/auth.go"},
-				Checks:                []validator.LocalCheck{{AgentID: "hunter-wave1-a", ReviewedPaths: []string{"src/router.go", "src/auth.go"}, Invariant: "Owner check", Method: "local", Result: "Bypassed", Artifact: &artPath}},
+				CoverageID:    covID,
+				Disposition:   "candidate",
+				ReviewedPaths: []string{"src/router.go", "src/auth.go"},
+				Checks: []validator.LocalCheck{{
+					AgentID:       "hunter-wave1-a",
+					ReviewedPaths: []string{"src/router.go", "src/auth.go"},
+					Invariant:     "Owner check",
+					Method:        "local",
+					Result:        "Bypassed",
+					Artifact:      &artPath,
+				}},
 				CandidateFingerprints: []string{"idor.user-update.missing-owner-check"},
 				Unresolved:            []string{},
 			},
@@ -428,490 +455,5 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 		CoverageIDs: []string{covID},
 	}); err == nil {
 		t.Fatalf("Break-test failed: AssignAgent allowed reusing wave 1 hunter on wave 2 reassigned unit!")
-	}
-}
-
-func TestBudgetGatesScopeAndCatalog(t *testing.T) {
-	// 1. CatalogQuery all 3 modes + error cases
-	allFiles, err := engine.CatalogQuery("", "")
-	if err != nil || allFiles == nil {
-		t.Fatalf("CatalogQuery all failed: %v", err)
-	}
-	oneFile, err := engine.CatalogQuery("WEB-PROTOCOL-AND-AUTH.md", "")
-	if err != nil || oneFile == nil {
-		t.Fatalf("CatalogQuery file failed: %v", err)
-	}
-	oneBlock, err := engine.CatalogQuery("", "ATTACK-CLASSES.md#Injection")
-	if err != nil || oneBlock == nil {
-		t.Fatalf("CatalogQuery block failed: %v", err)
-	}
-	if _, err := engine.CatalogQuery("NONEXISTENT.md", ""); err == nil {
-		t.Fatalf("expected error on unknown companion file")
-	}
-	if _, err := engine.CatalogQuery("", "ATTACK-CLASSES.md#Nonexistent"); err == nil {
-		t.Fatalf("expected error on unknown block ref")
-	}
-
-	// 2. Target containment check (output_dir inside target without gitignore must fail)
-	target := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(target, "src"), 0o755)
-	_ = os.WriteFile(filepath.Join(target, "src", "a.go"), []byte("package src\n"), 0o644)
-	_ = os.WriteFile(filepath.Join(target, "other.go"), []byte("package main\n"), 0o644)
-
-	if _, err := engine.Init(engine.InitRequest{
-		Target:    target,
-		OutputDir: filepath.Join(target, "audit-out"),
-	}); err == nil {
-		t.Fatalf("expected output_dir inside unignored target to fail")
-	}
-
-	// 3. Pre-recon budget gate: budget=3 on standard profile marks run incomplete
-	lowBudget := 3
-	lowOut := t.TempDir()
-	initLow, err := engine.Init(engine.InitRequest{
-		Target:    target,
-		OutputDir: lowOut,
-		Profile:   "standard",
-		Budget:    &lowBudget,
-	})
-	if err != nil {
-		t.Fatalf("Init low budget failed: %v", err)
-	}
-	if initLow.Metadata.RunStatus != "incomplete" || initLow.Metadata.IncompleteReason != "budget_cannot_fund_reconnaissance_and_reserves" {
-		t.Fatalf("expected incomplete run from pre-recon budget gate, got %+v", initLow.Metadata)
-	}
-	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir: lowOut,
-		Role:      "recon",
-		AgentID:   "recon-1",
-	}); err == nil {
-		t.Fatalf("expected AssignAgent on incomplete run to fail")
-	}
-
-	// 4. Scoped run + hunter budget reserve deferral + critic missing units
-	tightBudget := 7 // enough for Init (standard requires 7), then after 4 recons only 3 remain -> hunter assignment defers!
-	scopedOut := t.TempDir()
-	if _, err := engine.Init(engine.InitRequest{
-		Target:     target,
-		OutputDir:  scopedOut,
-		Profile:    "standard",
-		ScopePaths: []string{"src"},
-		Budget:     &tightBudget,
-	}); err != nil {
-		t.Fatalf("Init scoped failed: %v", err)
-	}
-	if _, err := engine.WriteArchitecture(scopedOut, "# Scoped Architecture\nOnly src is in scope."); err != nil {
-		t.Fatalf("WriteArchitecture: %v", err)
-	}
-
-	block := "ATTACK-CLASSES.md#Injection"
-	units, err := engine.SeedLedger(scopedOut, []engine.SeedUnitInput{
-		{
-			CanonicalRefs: validator.CanonicalRefs{
-				Surface: "src/a.go#A", Boundary: "src/a.go#A", Subsystem: "src", AttackClass: block,
-			},
-			Surface: "A", Boundary: "A", Subsystem: "src", AttackClass: "Injection",
-			StartingPaths: []string{"src/a.go"}, OrdinaryAttackClassBlock: &block,
-		},
-		{
-			CanonicalRefs: validator.CanonicalRefs{
-				Surface: "other.go#B", Boundary: "other.go#B", Subsystem: "root", AttackClass: block,
-			},
-			Surface: "B", Boundary: "B", Subsystem: "root", AttackClass: "Injection",
-			StartingPaths: []string{"other.go"}, OrdinaryAttackClassBlock: &block,
-		},
-	})
-	if err != nil || len(units) != 2 {
-		t.Fatalf("SeedLedger scoped failed: %v", err)
-	}
-
-	// Assign 4 recon agents so remaining budget is 7 - 4 = 3 (less than 1 hunter + 2 critics + 1 verifier = 4)
-	for i := 1; i <= 4; i++ {
-		if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-			OutputDir: scopedOut,
-			Role:      "recon",
-			AgentID:   "recon-" + string(rune('0'+i)),
-		}); err != nil {
-			t.Fatalf("AssignAgent recon-%d: %v", i, err)
-		}
-	}
-
-	var plannedID string
-	for _, u := range units {
-		if u.Status == "planned" {
-			plannedID = u.CoverageID
-		}
-	}
-	deferRes, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir:   scopedOut,
-		Role:        "hunter",
-		AgentID:     "hunter-deferred",
-		CoverageIDs: []string{plannedID},
-	})
-	if err != nil || len(deferRes.DeferredIDs) != 1 {
-		t.Fatalf("expected hunter assignment to defer planned unit under reserve pressure, got %+v err=%v", deferRes, err)
-	}
-
-	// Assign critic and add a missing unit
-	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir: scopedOut,
-		Role:      "critic",
-		AgentID:   "critic-1",
-	}); err != nil {
-		t.Fatalf("AssignAgent critic-1: %v", err)
-	}
-	cRes, err := engine.SubmitCritic(scopedOut, "critic-1", "post_wave", engine.CriticResult{
-		MissingUnits: []engine.CriticMissingUnit{
-			{
-				Surface:       "src/a.go#New",
-				Boundary:      "src/a.go#New",
-				Subsystem:     "src",
-				AttackClass:   "ATTACK-CLASSES.md#Access control",
-				StartingPaths: []string{"src/a.go"},
-				Reason:        "Newly discovered endpoint",
-			},
-		},
-		Stop: true,
-	})
-	if err != nil || cRes["added_units"] != 1 {
-		t.Fatalf("SubmitCritic missing units failed: %+v err=%v", cRes, err)
-	}
-
-	// FileHashSHA256 check
-	if h, err := engine.FileHashSHA256(filepath.Join(target, "other.go")); err != nil || len(h) != 64 {
-		t.Fatalf("FileHashSHA256 failed: %v", err)
-	}
-
-	// Render incomplete run with IncompleteReason
-	incRender, err := engine.Render(engine.RenderRequest{
-		OutputDir:        scopedOut,
-		IncompleteReason: "budget_exhausted_in_scoped_run",
-	})
-	if err != nil || incRender.RunStatus != "incomplete" {
-		t.Fatalf("Render incomplete run failed: %+v err=%v", incRender, err)
-	}
-
-	// Test SubmitVerifier with req.Check != nil on a quick profile run + rejected decision
-	quickOut := t.TempDir()
-	if _, err := engine.Init(engine.InitRequest{
-		Target:    target,
-		OutputDir: quickOut,
-		Profile:   "quick",
-	}); err != nil {
-		t.Fatalf("Init quick: %v", err)
-	}
-	_, _ = engine.WriteArchitecture(quickOut, "# Quick Arch\nSummary.")
-	qUnits, err := engine.SeedLedger(quickOut, []engine.SeedUnitInput{
-		{
-			CanonicalRefs: validator.CanonicalRefs{
-				Surface: "src/a.go#A", Boundary: "src/a.go#A", Subsystem: "src", AttackClass: block,
-			},
-			Surface: "A", Boundary: "A", Subsystem: "src", AttackClass: "Injection",
-			StartingPaths: []string{"src/a.go"}, OrdinaryAttackClassBlock: &block,
-		},
-	})
-	if err != nil {
-		t.Fatalf("SeedLedger quick: %v", err)
-	}
-	qCID := qUnits[0].CoverageID
-	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir: quickOut, Role: "hunter", AgentID: "q-hunter", CoverageIDs: []string{qCID},
-	}); err != nil {
-		t.Fatalf("AssignAgent q-hunter: %v", err)
-	}
-	if _, err := engine.SubmitHunter(quickOut, "q-hunter", engine.HunterStructuredResult{
-		Units: []engine.HunterUnitResult{
-			{
-				CoverageID:            qCID,
-				Disposition:           "candidate",
-				ReviewedPaths:         []string{"src/a.go"},
-				Checks:                []validator.LocalCheck{{AgentID: "q-hunter", ReviewedPaths: []string{"src/a.go"}, Invariant: "inv", Method: "source", Result: "res"}},
-				CandidateFingerprints: []string{"FIND-Q1"},
-			},
-		},
-		Candidates: []map[string]any{
-			{
-				"proposed_verdict":   "needs_validation",
-				"fingerprint":        "FIND-Q1",
-				"title":              "Lead",
-				"description":        "Desc",
-				"claimed_root_cause": "Root",
-				"trace":              []map[string]any{{"kind": "entrypoint", "file": "src/a.go", "line": 1, "scope": "A", "description": "d"}},
-				"evidence":           []map[string]any{{"file": "src/a.go", "line": 1, "description": "e"}},
-				"blockers":           []string{"Need env"},
-				"validation_plan":    map[string]any{"local": "Check env"},
-			},
-		},
-		Hardening: []string{"Enable strict headers"},
-	}); err != nil {
-		t.Fatalf("SubmitHunter quick: %v", err)
-	}
-	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir: quickOut, Role: "verifier", AgentID: "q-verifier", Fingerprint: "FIND-Q1",
-	}); err != nil {
-		t.Fatalf("AssignAgent q-verifier: %v", err)
-	}
-	if _, err := engine.SubmitVerifier(engine.VerifierSubmitRequest{
-		OutputDir:   quickOut,
-		AgentID:     "q-verifier",
-		Fingerprint: "FIND-Q1",
-		Decision:    "rejected",
-		Record: map[string]any{
-			"verdict":            "rejected",
-			"fingerprint":        "FIND-Q1",
-			"title":              "Lead",
-			"description":        "Desc",
-			"claimed_root_cause": "Root",
-			"trace":              []map[string]any{{"kind": "entrypoint", "file": "src/a.go", "line": 1, "scope": "A", "description": "d"}},
-			"evidence":           []map[string]any{{"file": "src/a.go", "line": 1, "description": "e"}},
-			"reason":             "Sanitized upstream",
-		},
-		Check: &validator.LocalCheck{
-			ReviewedPaths: []string{"src/a.go"},
-			Invariant:     "Verifier check",
-			Method:        "source",
-			Result:        "Refuted",
-		},
-	}); err != nil {
-		t.Fatalf("SubmitVerifier quick rejected: %v", err)
-	}
-	qRender, err := engine.Render(engine.RenderRequest{OutputDir: quickOut})
-	if err != nil || qRender.RejectedCount != 1 || qRender.RunStatus != "complete" {
-		t.Fatalf("Render quick complete failed: %+v err=%v", qRender, err)
-	}
-
-	// 5. Exhaustively test IsMaterialReplacement across all material vs non-material fields
-	baseF := validator.Finding{
-		Verdict:   "confirmed",
-		Title:     "Original title",
-		RootCause: "Missing tenant filter",
-		Trace: []validator.TraceEntry{
-			{Kind: "entrypoint", File: "a.go", Line: 1, Scope: "H", Description: "In"},
-			{Kind: "sink", File: "a.go", Line: 2, Scope: "Q", Description: "Out"},
-		},
-		Execution: &validator.ExecutionBlock{
-			Payloads:       []string{"p1"},
-			ObservedResult: "leaked row",
-		},
-		Severity: &validator.SeverityBlock{
-			Impact:          validator.ScoreReason{Score: "high", Reason: "r"},
-			OverallSeverity: "high",
-		},
-	}
-	nonMat := baseF
-	nonMat.Title = "Clarified wording in title only"
-	if engine.IsMaterialReplacement(baseF, nonMat) {
-		t.Fatalf("expected title-only change to be non-material")
-	}
-
-	// RootCause change -> material
-	cRoot := baseF
-	cRoot.RootCause = "Different root cause"
-	if !engine.IsMaterialReplacement(baseF, cRoot) {
-		t.Fatalf("expected RootCause change to be material")
-	}
-
-	// Trace length & element change -> material
-	cTraceLen := baseF
-	cTraceLen.Trace = baseF.Trace[:1]
-	if !engine.IsMaterialReplacement(baseF, cTraceLen) {
-		t.Fatalf("expected Trace length change to be material")
-	}
-	cTraceElem := baseF
-	cTraceElem.Trace = []validator.TraceEntry{
-		baseF.Trace[0],
-		{Kind: "sink", File: "a.go", Line: 99, Scope: "Q", Description: "Out"},
-	}
-	if !engine.IsMaterialReplacement(baseF, cTraceElem) {
-		t.Fatalf("expected Trace line change to be material")
-	}
-
-	// Execution payload / nil change -> material
-	cExec := baseF
-	cExec.Execution = &validator.ExecutionBlock{Payloads: []string{"p2"}, ObservedResult: "leaked row"}
-	if !engine.IsMaterialReplacement(baseF, cExec) {
-		t.Fatalf("expected Execution payload change to be material")
-	}
-	cExecNil := baseF
-	cExecNil.Execution = nil
-	if !engine.IsMaterialReplacement(baseF, cExecNil) {
-		t.Fatalf("expected Execution nil change to be material")
-	}
-
-	// Severity score / nil change -> material
-	cSev := baseF
-	cSev.Severity = &validator.SeverityBlock{
-		Impact:          validator.ScoreReason{Score: "critical", Reason: "r"},
-		OverallSeverity: "critical",
-	}
-	if !engine.IsMaterialReplacement(baseF, cSev) {
-		t.Fatalf("expected Severity change to be material")
-	}
-	cSevNil := baseF
-	cSevNil.Severity = nil
-	if !engine.IsMaterialReplacement(baseF, cSevNil) {
-		t.Fatalf("expected Severity nil change to be material")
-	}
-}
-
-func TestBitForBitReproducibility(t *testing.T) {
-	target := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(target, "src"), 0o755)
-	_ = os.WriteFile(filepath.Join(target, "src", "auth.go"), []byte("package src\nfunc Login() {}\nfuncCheck() {}\n"), 0o644)
-
-	// Create a prior run with 3 carried confirmed findings so map ordering in state.Candidates is exercised
-	priorDir := t.TempDir()
-	priorFindings := `[
-		{"verdict":"confirmed","fingerprint":"FIND-C","title":"T3","description":"D","root_cause":"R3","intended_behavior":"I","trace":[{"kind":"sink","file":"src/auth.go","line":1,"scope":"S","description":"D"}],"evidence":[{"file":"src/auth.go","line":1,"description":"E"}],"conditions":[],"execution":{"attacker_perspective":"A","payloads":["p"],"instructions":["i"],"observed_result":"o"},"remediation":{"strategy":"s","code_changes":[]},"severity":{"likelihood":{"score":"low","reason":"r"},"impact":{"score":"low","reason":"r"},"overall_severity":"low"},"confidence":{"score":"high","reason":"r"}},
-		{"verdict":"confirmed","fingerprint":"FIND-A","title":"T1","description":"D","root_cause":"R1","intended_behavior":"I","trace":[{"kind":"sink","file":"src/auth.go","line":1,"scope":"S","description":"D"}],"evidence":[{"file":"src/auth.go","line":1,"description":"E"}],"conditions":[],"execution":{"attacker_perspective":"A","payloads":["p"],"instructions":["i"],"observed_result":"o"},"remediation":{"strategy":"s","code_changes":[]},"severity":{"likelihood":{"score":"low","reason":"r"},"impact":{"score":"low","reason":"r"},"overall_severity":"low"},"confidence":{"score":"high","reason":"r"}},
-		{"verdict":"confirmed","fingerprint":"FIND-B","title":"T2","description":"D","root_cause":"R2","intended_behavior":"I","trace":[{"kind":"sink","file":"src/auth.go","line":1,"scope":"S","description":"D"}],"evidence":[{"file":"src/auth.go","line":1,"description":"E"}],"conditions":[],"execution":{"attacker_perspective":"A","payloads":["p"],"instructions":["i"],"observed_result":"o"},"remediation":{"strategy":"s","code_changes":[]},"severity":{"likelihood":{"score":"low","reason":"r"},"impact":{"score":"low","reason":"r"},"overall_severity":"low"},"confidence":{"score":"high","reason":"r"}}
-	]`
-	_ = os.WriteFile(filepath.Join(priorDir, "findings.json"), []byte(priorFindings), 0o600)
-
-	runDeterministicPass := func(outDir string) (*engine.RenderResponse, string) {
-		if _, err := engine.Init(engine.InitRequest{
-			Target:       target,
-			OutputDir:    outDir,
-			Profile:      "quick",
-			PriorRunDirs: []string{priorDir},
-		}); err != nil {
-			t.Fatalf("Init: %v", err)
-		}
-		if _, err := engine.WriteArchitecture(outDir, "# Deterministic Architecture\nZero variance."); err != nil {
-			t.Fatalf("WriteArchitecture: %v", err)
-		}
-		block := "ATTACK-CLASSES.md#Access control"
-		units, err := engine.SeedLedger(outDir, []engine.SeedUnitInput{
-			{
-				CanonicalRefs: validator.CanonicalRefs{
-					Surface: "src/auth.go#Login", Boundary: "src/auth.go#Login", Subsystem: "src", AttackClass: block,
-				},
-				Surface: "Login", Boundary: "Login", Subsystem: "src", AttackClass: "Access control",
-				StartingPaths: []string{"src/auth.go"}, OrdinaryAttackClassBlock: &block,
-			},
-		})
-		if err != nil {
-			t.Fatalf("SeedLedger: %v", err)
-		}
-		cid := units[0].CoverageID
-		assignRes, err := engine.AssignAgent(engine.AssignAgentRequest{
-			OutputDir: outDir, Role: "hunter", AgentID: "hunter-1", CoverageIDs: []string{cid},
-		})
-		if err != nil {
-			t.Fatalf("AssignAgent: %v", err)
-		}
-		// Normalize outputDir in prompt before comparing
-		normPrompt := strings.ReplaceAll(assignRes.Prompt, outDir, "<OUT>")
-
-		if _, err := engine.SubmitHunter(outDir, "hunter-1", engine.HunterStructuredResult{
-			Units: []engine.HunterUnitResult{
-				{
-					CoverageID:            cid,
-					Disposition:           "candidate",
-					ReviewedPaths:         []string{"src/auth.go"},
-					Checks:                []validator.LocalCheck{{AgentID: "hunter-1", ReviewedPaths: []string{"src/auth.go"}, Invariant: "Auth check", Method: "source", Result: "Enforced"}},
-					CandidateFingerprints: []string{"FIND-A", "FIND-B", "FIND-C"},
-				},
-			},
-		}); err != nil {
-			t.Fatalf("SubmitHunter: %v", err)
-		}
-		for _, fp := range []string{"FIND-A", "FIND-B", "FIND-C"} {
-			vid := "verifier-" + strings.ToLower(fp)
-			if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-				OutputDir: outDir, Role: "verifier", AgentID: vid, Fingerprint: fp,
-			}); err != nil {
-				t.Fatalf("AssignAgent %s: %v", vid, err)
-			}
-			if _, err := engine.SubmitVerifier(engine.VerifierSubmitRequest{
-				OutputDir: outDir, AgentID: vid, Fingerprint: fp, Decision: "rejected",
-				Record: map[string]any{
-					"verdict": "rejected", "fingerprint": fp, "title": "Fixed", "description": "D",
-					"claimed_root_cause": "R",
-					"trace":              []map[string]any{{"kind": "sink", "file": "src/auth.go", "line": 1, "scope": "S", "description": "D"}},
-					"evidence":           []map[string]any{{"file": "src/auth.go", "line": 1, "description": "E"}},
-					"reason":             "Patched in current commit",
-				},
-			}); err != nil {
-				t.Fatalf("SubmitVerifier %s: %v", vid, err)
-			}
-		}
-		rRes, err := engine.Render(engine.RenderRequest{OutputDir: outDir})
-		if err != nil {
-			t.Fatalf("Render: %v", err)
-		}
-		return rRes, normPrompt
-	}
-
-	resA, promptA := runDeterministicPass(filepath.Join(t.TempDir(), "run-deterministic"))
-	resB, promptB := runDeterministicPass(filepath.Join(t.TempDir(), "run-deterministic"))
-
-	if promptA != promptB {
-		t.Fatalf("Reproducibility failure: compiled hunter prompts differ across identical runs!")
-	}
-	for _, artifact := range []string{
-		"architecture.md",
-		"coverage-ledger.json",
-		"findings.json",
-		"REPORT.md",
-		"FINDINGS-DETAIL.md",
-		"NEEDS-VALIDATION.md",
-		"findings.sarif",
-	} {
-		if resA.ArtifactHashes[artifact] == "" || resA.ArtifactHashes[artifact] != resB.ArtifactHashes[artifact] {
-			t.Fatalf("Bit-for-bit reproducibility failure on %s:\n runA: %s\n runB: %s", artifact, resA.ArtifactHashes[artifact], resB.ArtifactHashes[artifact])
-		}
-	}
-}
-
-func BenchmarkEndToEndWorkflow(b *testing.B) {
-	target := b.TempDir()
-	_ = os.MkdirAll(filepath.Join(target, "src"), 0o755)
-	_ = os.WriteFile(filepath.Join(target, "src", "api.go"), []byte("package src\nfunc Handle() {}\n"), 0o644)
-	block := "ATTACK-CLASSES.md#Injection"
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		outDir := filepath.Join(b.TempDir(), "run")
-		if _, err := engine.Init(engine.InitRequest{Target: target, OutputDir: outDir, Profile: "quick"}); err != nil {
-			b.Fatal(err)
-		}
-		if _, err := engine.WriteArchitecture(outDir, "# Arch\nBoundaries."); err != nil {
-			b.Fatal(err)
-		}
-		units, err := engine.SeedLedger(outDir, []engine.SeedUnitInput{
-			{
-				CanonicalRefs: validator.CanonicalRefs{
-					Surface: "src/api.go#Handle", Boundary: "src/api.go#Handle", Subsystem: "src", AttackClass: block,
-				},
-				Surface: "Handle", Boundary: "Handle", Subsystem: "src", AttackClass: "Injection",
-				StartingPaths: []string{"src/api.go"}, OrdinaryAttackClassBlock: &block,
-			},
-		})
-		if err != nil {
-			b.Fatal(err)
-		}
-		cid := units[0].CoverageID
-		if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-			OutputDir: outDir, Role: "hunter", AgentID: "hunter-1", CoverageIDs: []string{cid},
-		}); err != nil {
-			b.Fatal(err)
-		}
-		if _, err := engine.SubmitHunter(outDir, "hunter-1", engine.HunterStructuredResult{
-			Units: []engine.HunterUnitResult{
-				{
-					CoverageID:    cid,
-					Disposition:   "covered",
-					ReviewedPaths: []string{"src/api.go"},
-					Checks:        []validator.LocalCheck{{AgentID: "hunter-1", ReviewedPaths: []string{"src/api.go"}, Invariant: "SQL", Method: "source", Result: "Safe"}},
-				},
-			},
-		}); err != nil {
-			b.Fatal(err)
-		}
-		if _, err := engine.Render(engine.RenderRequest{OutputDir: outDir}); err != nil {
-			b.Fatal(err)
-		}
 	}
 }

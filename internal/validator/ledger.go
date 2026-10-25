@@ -350,7 +350,10 @@ func ValidateCrossFileConsistency(units []CoverageUnit, findings []Finding) []st
 	}
 	for idx, f := range findings {
 		if !linkedInLedger[f.Fingerprint] {
-			errs = append(errs, fmt.Sprintf("findings[%d].fingerprint: %q is not referenced by any coverage unit result_fingerprints", idx, f.Fingerprint))
+			errs = append(errs, fmt.Sprintf(
+				"findings[%d].fingerprint: %q is not referenced by any coverage unit result_fingerprints",
+				idx, f.Fingerprint,
+			))
 		}
 	}
 	return errs

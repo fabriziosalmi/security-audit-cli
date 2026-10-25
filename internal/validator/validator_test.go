@@ -23,7 +23,8 @@ func TestDeriveCoverageIDAndCommonPrimitives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveCoverageID error: %v", err)
 	}
-	want := "src%2Frouter.ts%23POST%20%2Fusers%2F%3Aid::src%2Fauthz.ts%23requireOwner::packages%2Fapi::ATTACK-CLASSES.md%23Access%20control::rotate-key"
+	want := "src%2Frouter.ts%23POST%20%2Fusers%2F%3Aid::src%2Fauthz.ts%23requireOwner::" +
+		"packages%2Fapi::ATTACK-CLASSES.md%23Access%20control::rotate-key"
 	if got != want {
 		t.Fatalf("DeriveCoverageID mismatch:\n got: %s\nwant: %s", got, want)
 	}
@@ -40,7 +41,10 @@ func TestDeriveCoverageIDAndCommonPrimitives(t *testing.T) {
 	}
 
 	// Path & AgentID checks
-	for _, badPath := range []string{"", "/abs", "~/home", `win\path`, "c:drive", "a//b", "a/../b", "a/./b", "trailing. ", "trailing.", "con.txt", "nul", "zero\u200Bwidth"} {
+	for _, badPath := range []string{
+		"", "/abs", "~/home", `win\path`, "c:drive", "a//b", "a/../b", "a/./b",
+		"trailing. ", "trailing.", "con.txt", "nul", "zero\u200Bwidth",
+	} {
 		if validator.IsSafeRelativePath(badPath) {
 			t.Fatalf("expected IsSafeRelativePath(%q) == false", badPath)
 		}
@@ -139,8 +143,11 @@ func TestValidateLedgerStateTableAndAttempts(t *testing.T) {
 		StartingPaths:            []string{"src/api.go"},
 		OrdinaryAttackClassBlock: &block,
 		SelectedCompanionBlocks:  []string{"WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"},
-		ExcludedBlocks:           []validator.ExcludedBlock{{Block: "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport", Reason: "stateless token"}},
-		PriorStatus:              "none",
+		ExcludedBlocks: []validator.ExcludedBlock{{
+			Block:  "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+			Reason: "stateless token",
+		}},
+		PriorStatus: "none",
 		Attempts: []validator.ArchivedAttempt{
 			{
 				Wave:          1,
@@ -181,8 +188,8 @@ func TestValidateLedgerStateTableAndAttempts(t *testing.T) {
 	}
 
 	validBlocks := map[string]bool{
-		"ATTACK-CLASSES.md#Injection":              true,
-		"WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF":   true,
+		"ATTACK-CLASSES.md#Injection":            true,
+		"WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF": true,
 	}
 
 	raw, _ := json.Marshal([]validator.CoverageUnit{unit})
@@ -223,7 +230,10 @@ func TestValidateLedgerStateTableAndAttempts(t *testing.T) {
 	}
 
 	// Cross-file consistency check
-	crossErrs := validator.ValidateCrossFileConsistency([]validator.CoverageUnit{unit}, []validator.Finding{{Fingerprint: "FIND-0001"}, {Fingerprint: "ORPHAN-999"}})
+	crossErrs := validator.ValidateCrossFileConsistency(
+		[]validator.CoverageUnit{unit},
+		[]validator.Finding{{Fingerprint: "FIND-0001"}, {Fingerprint: "ORPHAN-999"}},
+	)
 	if len(crossErrs) != 1 || !strings.Contains(crossErrs[0], "ORPHAN-999") {
 		t.Fatalf("expected orphan finding to fail cross-file consistency, got %v", crossErrs)
 	}

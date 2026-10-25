@@ -58,7 +58,11 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(target, "main.go"), []byte("package main\nfunc main(){}\n"), 0o644)
 	outDir := t.TempDir()
 	stdout.Reset()
-	code = run([]string{"init", "--target", target, "--output-dir", outDir, "--profile", "quick", "--budget", "10", "--scope-paths", "main.go"}, strings.NewReader(""), &stdout, &stderr)
+	initArgs := []string{
+		"init", "--target", target, "--output-dir", outDir,
+		"--profile", "quick", "--budget", "10", "--scope-paths", "main.go",
+	}
+	code = run(initArgs, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("init CLI failed: %s", stderr.String())
 	}
@@ -71,7 +75,8 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 		t.Fatalf("architecture --file failed: code=%d err=%s out=%s", code, stderr.String(), stdout.String())
 	}
 	stdout.Reset()
-	code = run([]string{"architecture", "--output-dir", outDir, "--content", "# Arch\nInline content."}, strings.NewReader(""), &stdout, &stderr)
+	archInline := []string{"architecture", "--output-dir", outDir, "--content", "# Arch\nInline content."}
+	code = run(archInline, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("architecture --content failed: %s", stderr.String())
 	}
@@ -87,31 +92,45 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 
 	objFile := filepath.Join(tmpInputDir, "obj.json")
 	_ = os.WriteFile(objFile, []byte(`{"stop":true}`), 0o600)
-	rawC, err := parseSubcommandFlags("critic-submit", []string{"--output-dir", outDir, "--agent-id", "critic-1", "--critic-kind", "final_clean", "--input", objFile}, strings.NewReader(""))
+	cArgs := []string{
+		"--output-dir", outDir, "--agent-id", "critic-1",
+		"--critic-kind", "final_clean", "--input", objFile,
+	}
+	rawC, err := parseSubcommandFlags("critic-submit", cArgs, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawC), `"result"`) || !strings.Contains(string(rawC), `"final_clean"`) {
 		t.Fatalf("critic-submit --input wrapper failed: %v %s", err, string(rawC))
 	}
 
-	rawV, err := parseSubcommandFlags("verifier-submit", []string{"--output-dir", outDir, "--agent-id", "ver-1", "--fingerprint", "F-1", "--decision", "rejected", "--reason", "r", "--input", objFile}, strings.NewReader(""))
+	vArgs := []string{
+		"--output-dir", outDir, "--agent-id", "ver-1", "--fingerprint", "F-1",
+		"--decision", "rejected", "--reason", "r", "--input", objFile,
+	}
+	rawV, err := parseSubcommandFlags("verifier-submit", vArgs, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawV), `"record"`) {
 		t.Fatalf("verifier-submit --input wrapper failed: %v %s", err, string(rawV))
 	}
 
-	rawP, err := parseSubcommandFlags("artifact-promote", []string{"--output-dir", outDir, "--agent-id", "h-1", "--files", "a.txt,b.txt", "--max-file-bytes", "100", "--max-total-bytes", "500"}, strings.NewReader(""))
+	pArgs := []string{
+		"--output-dir", outDir, "--agent-id", "h-1", "--files", "a.txt,b.txt",
+		"--max-file-bytes", "100", "--max-total-bytes", "500",
+	}
+	rawP, err := parseSubcommandFlags("artifact-promote", pArgs, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawP), `"max_file_bytes":100`) {
 		t.Fatalf("artifact-promote flags failed: %v %s", err, string(rawP))
 	}
 
 	// Verify critic-submit preserves critic_kind from --input JSON when --critic-kind flag is omitted
 	criticInputFile := filepath.Join(tmpInputDir, "critic-final.json")
-	_ = os.WriteFile(criticInputFile, []byte(`{"output_dir":"/tmp/x","agent_id":"c-1","critic_kind":"final_clean","result":{"stop":true}}`), 0o600)
+	criticPayload := `{"output_dir":"/tmp/x","agent_id":"c-1","critic_kind":"final_clean","result":{"stop":true}}`
+	_ = os.WriteFile(criticInputFile, []byte(criticPayload), 0o600)
 	rawCriticJSON, err := parseSubcommandFlags("critic-submit", []string{"--input", criticInputFile}, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawCriticJSON), `"critic_kind":"final_clean"`) {
 		t.Fatalf("expected critic-submit to preserve critic_kind=final_clean from --input JSON, got: %v %s", err, string(rawCriticJSON))
 	}
 
 	// Verify --prior-run-dirs flag is parsed into prior_run_dirs slice
-	rawInitPrior, err := parseSubcommandFlags("init", []string{"--target", target, "--prior-run-dirs", "/tmp/r1,/tmp/r2"}, strings.NewReader(""))
+	priorArgs := []string{"--target", target, "--prior-run-dirs", "/tmp/r1,/tmp/r2"}
+	rawInitPrior, err := parseSubcommandFlags("init", priorArgs, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawInitPrior), `"/tmp/r1"`) || !strings.Contains(string(rawInitPrior), `"/tmp/r2"`) {
 		t.Fatalf("expected init --prior-run-dirs to populate prior_run_dirs, got: %v %s", err, string(rawInitPrior))
 	}

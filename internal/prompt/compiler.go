@@ -15,11 +15,20 @@ import (
 
 // CompileRecon builds the Phase 1 reconnaissance subagent prompt.
 func CompileRecon(targetDir string) string {
-	return fmt.Sprintf("Read the target at %s. Do not use network access. Return only source facts with repository-relative file:line references.", targetDir)
+	return fmt.Sprintf(
+		"Read the target at %s. Do not use network access. "+
+			"Return only source facts with repository-relative file:line references.",
+		targetDir,
+	)
 }
 
 // CompileHunter builds the 9-part self-contained Phase 2 hunter prompt from HUNTING.md.
-func CompileHunter(outputDir, agentID string, assignedUnits, allUnits []validator.CoverageUnit, state *store.InternalState, cat *spec.Catalog) (string, error) {
+func CompileHunter(
+	outputDir, agentID string,
+	assignedUnits, allUnits []validator.CoverageUnit,
+	state *store.InternalState,
+	cat *spec.Catalog,
+) (string, error) {
 	archBytes, err := os.ReadFile(filepath.Join(outputDir, "architecture.md"))
 	if err != nil {
 		return "", fmt.Errorf("architecture.md must be written before assigning hunters: %w", err)
@@ -31,7 +40,8 @@ func CompileHunter(outputDir, agentID string, assignedUnits, allUnits []validato
 
 	var b strings.Builder
 	// Part 1: Two-sentence role preamble
-	b.WriteString("Your goal is to find source-grounded security invariant failures in your assigned coverage units. You must return exactly one JSON object matching the structured-result contract at the end of this prompt.\n\n")
+	b.WriteString("Your goal is to find source-grounded security invariant failures in your assigned coverage units. " +
+		"You must return exactly one JSON object matching the structured-result contract at the end of this prompt.\n\n")
 
 	// Part 2: architecture.md verbatim
 	b.WriteString("## Architecture Summary\n\n")
@@ -104,14 +114,27 @@ func CompileHunter(outputDir, agentID string, assignedUnits, allUnits []validato
 	for _, fp := range candKeys {
 		env := state.Candidates[fp]
 		if env.HunterID == "prior-run-carryover" && env.ProposedVerdict == "confirmed" {
-			fmt.Fprintf(&b, "- Carried prior confirmed exclusion: `%s` (%s) — %s\n", env.Fingerprint, env.CandidateRecord.Title, env.CandidateRecord.RootCause)
+			fmt.Fprintf(
+				&b,
+				"- Carried prior confirmed exclusion: `%s` (%s): %s\n",
+				env.Fingerprint,
+				env.CandidateRecord.Title,
+				env.CandidateRecord.RootCause,
+			)
 		}
 	}
 	b.WriteString("\n")
 
 	// Part 9: Scratch/artifact paths, agent ID, and structured result contract
-	fmt.Fprintf(&b, "## Workspace and Structured Result Contract\n\n- Canonical `agent_id`: `%s`\n- Writable scratch directory: `%s/agents/%s/scratch`\n- Retained artifacts prefix (parent-promoted only): `agents/%s/artifacts/`\n\nSchema branches (`confirmed` and `needs_validation`):\n```json\n%s\n```\n",
-		agentID, outputDir, agentID, agentID, schemas)
+	fmt.Fprintf(
+		&b,
+		"## Workspace and Structured Result Contract\n\n"+
+			"- Canonical `agent_id`: `%s`\n"+
+			"- Writable scratch directory: `%s/agents/%s/scratch`\n"+
+			"- Retained artifacts prefix (parent-promoted only): `agents/%s/artifacts/`\n\n"+
+			"Schema branches (`confirmed` and `needs_validation`):\n```json\n%s\n```\n",
+		agentID, outputDir, agentID, agentID, schemas,
+	)
 
 	return b.String(), nil
 }
@@ -133,19 +156,34 @@ func CompileVerifier(outputDir, agentID string, env *store.CandidateEnvelope, ca
 	b.WriteString("\n\n## Schema Branches (`confirmed`, `needs_validation`, `rejected`)\n\n```json\n")
 	b.WriteString(schemas)
 	b.WriteString("\n```\n\n")
-	fmt.Fprintf(&b, "Assigned verifier `agent_id`: `%s`\nScratch directory: `%s/agents/%s/scratch`\nReturn `{\"decision\": \"confirmed|needs_validation|rejected\", \"record\": { ... }}`.\n", agentID, outputDir, agentID)
+	fmt.Fprintf(
+		&b,
+		"Assigned verifier `agent_id`: `%s`\nScratch directory: `%s/agents/%s/scratch`\n"+
+			"Return `{\"decision\": \"confirmed|needs_validation|rejected\", \"record\": { ... }}`.\n",
+		agentID, outputDir, agentID,
+	)
 	return b.String(), nil
 }
 
 // CompileRecordVerifier builds the Phase 5 independent record-verification prompt.
 func CompileRecordVerifier(env *store.CandidateEnvelope) string {
 	recJSON, _ := json.MarshalIndent(env.FinalRecord, "", "  ")
-	return fmt.Sprintf("Independently verify this final record against repository source:\n\n```json\n%s\n```\n\nReturn `{\"decision\":\"verified\",\"fingerprint\":%q}` or `{\"decision\":\"replace\",\"reason\":\"...\",\"record\":{...}}`.", string(recJSON), env.Fingerprint)
+	return fmt.Sprintf(
+		"Independently verify this final record against repository source:\n\n```json\n%s\n```\n\n"+
+			"Return `{\"decision\":\"verified\",\"fingerprint\":%q}` or `{\"decision\":\"replace\",\"reason\":\"...\",\"record\":{...}}`.",
+		string(recJSON),
+		env.Fingerprint,
+	)
 }
 
 // CompileCritic builds the Phase 2 coverage-critic prompt.
 func CompileCritic(outputDir string, units []validator.CoverageUnit) (string, error) {
 	archBytes, _ := os.ReadFile(filepath.Join(outputDir, "architecture.md"))
 	ledgerJSON, _ := json.MarshalIndent(units, "", "  ")
-	return fmt.Sprintf("Review architecture and coverage-ledger.json for unmapped entry points, unchecked parallel paths, or premature closures.\n\n## Architecture\n%s\n\n## Coverage Ledger\n```json\n%s\n```\n", string(archBytes), string(ledgerJSON)), nil
+	return fmt.Sprintf(
+		"Review architecture and coverage-ledger.json for unmapped entry points, "+
+			"unchecked parallel paths, or premature closures.\n\n## Architecture\n%s\n\n## Coverage Ledger\n```json\n%s\n```\n",
+		string(archBytes),
+		string(ledgerJSON),
+	), nil
 }

@@ -29,7 +29,10 @@ var (
 	FingerprintPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$`)
 	AgentIDPattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	WindowsReservedID  = regexp.MustCompile(`^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$`)
-	WindowsReservedSeg = regexp.MustCompile(`(?i)^(?:con|prn|aux|nul|clock\$|conin\$|conout\$|com[1-9\x{00b9}\x{00b2}\x{00b3}]|lpt[1-9\x{00b9}\x{00b2}\x{00b3}])(?:\.|$)`)
+	WindowsReservedSeg = regexp.MustCompile(
+		`(?i)^(?:con|prn|aux|nul|clock\$|conin\$|conout\$|` +
+			`com[1-9\x{00b9}\x{00b2}\x{00b3}]|lpt[1-9\x{00b9}\x{00b2}\x{00b3}])(?:\.|$)`,
+	)
 )
 
 func isDefaultIgnorable(r rune) bool {

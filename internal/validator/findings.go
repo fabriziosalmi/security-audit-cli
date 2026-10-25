@@ -65,15 +65,15 @@ var (
 		"evidence":           true,
 		"reason":             true,
 	}
-	traceAllowedFields      = map[string]bool{"kind": true, "file": true, "line": true, "scope": true, "description": true}
-	evidenceAllowedFields   = map[string]bool{"file": true, "line": true, "description": true}
-	conditionAllowedFields  = map[string]bool{"kind": true, "description": true}
-	executionAllowedFields  = map[string]bool{"attacker_perspective": true, "payloads": true, "instructions": true, "observed_result": true}
-	remediationAllowed      = map[string]bool{"strategy": true, "code_changes": true}
-	codeChangeAllowed       = map[string]bool{"file_name": true, "fixed_code": true}
-	severityAllowed         = map[string]bool{"likelihood": true, "impact": true, "overall_severity": true}
-	scoreReasonAllowed      = map[string]bool{"score": true, "reason": true}
-	validationPlanAllowed   = map[string]bool{"local": true, "deployment": true}
+	traceAllowedFields     = map[string]bool{"kind": true, "file": true, "line": true, "scope": true, "description": true}
+	evidenceAllowedFields  = map[string]bool{"file": true, "line": true, "description": true}
+	conditionAllowedFields = map[string]bool{"kind": true, "description": true}
+	executionAllowedFields = map[string]bool{"attacker_perspective": true, "payloads": true, "instructions": true, "observed_result": true}
+	remediationAllowed     = map[string]bool{"strategy": true, "code_changes": true}
+	codeChangeAllowed      = map[string]bool{"file_name": true, "fixed_code": true}
+	severityAllowed        = map[string]bool{"likelihood": true, "impact": true, "overall_severity": true}
+	scoreReasonAllowed     = map[string]bool{"score": true, "reason": true}
+	validationPlanAllowed  = map[string]bool{"local": true, "deployment": true}
 )
 
 // ValidateFindingsFile reads and validates findings.json from disk.
@@ -178,10 +178,17 @@ func ValidateSingleFinding(f Finding, rawItem map[string]any, base, targetDir st
 	switch verdict {
 	case "confirmed":
 		allowed = confirmedAllowed
-		required = []string{verdictField, "fingerprint", "title", "description", "root_cause", "intended_behavior", "trace", "evidence", "conditions", "execution", "remediation", "severity", "confidence"}
+		required = []string{
+			verdictField, "fingerprint", "title", "description", "root_cause",
+			"intended_behavior", "trace", "evidence", "conditions", "execution",
+			"remediation", "severity", "confidence",
+		}
 	case "needs_validation":
 		allowed = needsValidationAllowed
-		required = []string{verdictField, "fingerprint", "title", "description", "claimed_root_cause", "trace", "evidence", "blockers", "validation_plan"}
+		required = []string{
+			verdictField, "fingerprint", "title", "description",
+			"claimed_root_cause", "trace", "evidence", "blockers", "validation_plan",
+		}
 	case "rejected":
 		allowed = rejectedAllowed
 		required = []string{verdictField, "fingerprint", "title", "description", "claimed_root_cause", "trace", "evidence", "reason"}

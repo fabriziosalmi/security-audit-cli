@@ -105,7 +105,8 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 	if len(cos) != 1 {
 		t.Fatalf("expected 1 carryover summary, got %d", len(cos))
 	}
-	if len(cos[0].CarriedConfirmed) != 1 || len(cos[0].ChangedConfirmed) != 1 || len(cos[0].CarriedNeedsValidation) != 1 || len(cos[0].SuppressedRejected) != 1 {
+	if len(cos[0].CarriedConfirmed) != 1 || len(cos[0].ChangedConfirmed) != 1 ||
+		len(cos[0].CarriedNeedsValidation) != 1 || len(cos[0].SuppressedRejected) != 1 {
 		t.Fatalf("unexpected carryover classification: %+v", cos[0])
 	}
 	if len(carried) != 2 {

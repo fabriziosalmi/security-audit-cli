@@ -220,12 +220,16 @@ func IsMaterialReplacement(oldF, newF validator.Finding) bool {
 		return true
 	}
 	for i := range oldF.Trace {
-		if oldF.Trace[i].Kind != newF.Trace[i].Kind || oldF.Trace[i].File != newF.Trace[i].File || oldF.Trace[i].Line != newF.Trace[i].Line || oldF.Trace[i].Scope != newF.Trace[i].Scope {
+		if oldF.Trace[i].Kind != newF.Trace[i].Kind ||
+			oldF.Trace[i].File != newF.Trace[i].File ||
+			oldF.Trace[i].Line != newF.Trace[i].Line ||
+			oldF.Trace[i].Scope != newF.Trace[i].Scope {
 			return true
 		}
 	}
 	if oldF.Execution != nil && newF.Execution != nil {
-		if !reflect.DeepEqual(oldF.Execution.Payloads, newF.Execution.Payloads) || oldF.Execution.ObservedResult != newF.Execution.ObservedResult {
+		if !reflect.DeepEqual(oldF.Execution.Payloads, newF.Execution.Payloads) ||
+			oldF.Execution.ObservedResult != newF.Execution.ObservedResult {
 			return true
 		}
 	} else if (oldF.Execution == nil) != (newF.Execution == nil) {

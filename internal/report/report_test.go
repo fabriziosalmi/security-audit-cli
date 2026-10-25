@@ -85,7 +85,10 @@ func TestMarkdownAndSARIFBuilders(t *testing.T) {
 	}
 
 	counts := map[string]int{"covered": 3, "candidate": 2, "deferred": 1}
-	repMD := BuildReportMD(meta, state, make([]validator.CoverageUnit, 6), counts, confirmed, needsVal, nil, []string{"FIND-0099"}, []string{"FIND-0098"})
+	repMD := BuildReportMD(
+		meta, state, make([]validator.CoverageUnit, 6), counts,
+		confirmed, needsVal, nil, []string{"FIND-0099"}, []string{"FIND-0098"},
+	)
 	for _, want := range []string{
 		"FIND-0001",
 		"FIND-0002",

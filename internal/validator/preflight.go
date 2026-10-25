@@ -8,10 +8,10 @@ import (
 )
 
 type containerFrame struct {
-	isObject bool
+	isObject  bool
 	expectKey bool
-	keys     map[string]bool
-	count    int
+	keys      map[string]bool
+	count     int
 }
 
 // ValidateJSONPreflight performs a single-pass O(N) token scan over raw JSON bytes,

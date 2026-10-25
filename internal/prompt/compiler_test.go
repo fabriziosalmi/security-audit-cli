@@ -44,7 +44,8 @@ func TestCompileAllRolePrompts(t *testing.T) {
 		},
 	}
 
-	if _, err := CompileHunter(outDir, "hunter-1", []validator.CoverageUnit{unit1}, []validator.CoverageUnit{unit1, unit2}, st, cat); err == nil {
+	allU := []validator.CoverageUnit{unit1, unit2}
+	if _, err := CompileHunter(outDir, "hunter-1", []validator.CoverageUnit{unit1}, allU, st, cat); err == nil {
 		t.Fatalf("expected error when architecture.md is missing")
 	}
 

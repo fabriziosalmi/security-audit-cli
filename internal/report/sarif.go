@@ -28,7 +28,7 @@ func BuildSARIF(confirmed []validator.Finding) ([]byte, error) {
 		results = append(results, map[string]any{
 			"ruleId":  f.Fingerprint,
 			"level":   level,
-			"message": map[string]any{"text": f.RootCause + " — Observed: " + f.Execution.ObservedResult},
+			"message": map[string]any{"text": f.RootCause + " | Observed: " + f.Execution.ObservedResult},
 			"locations": []map[string]any{
 				{
 					"physicalLocation": map[string]any{
