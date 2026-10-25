@@ -27,134 +27,41 @@ type RepoBrief struct {
 }
 
 var ignoredDirs = map[string]bool{
-	".git":          true,
-	"node_modules":  true,
-	"vendor":        true,
-	".venv":         true,
-	"venv":          true,
-	"env":           true,
-	"__pycache__":   true,
-	".pytest_cache": true,
-	".mypy_cache":   true,
-	".ruff_cache":   true,
-	".tox":          true,
-	".cache":        true,
-	"dist":          true,
-	"build":         true,
-	"target":        true,
-	".next":         true,
-	".nuxt":         true,
-	".svelte-kit":   true,
-	".astro":        true,
-	".vitepress":    true,
-	".docusaurus":   true,
-	"_site":         true,
-	"coverage":      true,
-	"htmlcov":       true,
-	".terraform":    true,
-	".gradle":       true,
-	"Pods":          true,
-	"DerivedData":   true,
-	".claude":       true,
-	".cursor":       true,
-	".gemini":       true,
-	".codex":        true,
-	".agent":        true,
-	".agents":       true,
-	".worktrees":    true,
-	"worktrees":     true,
+	".git": true, "node_modules": true, "vendor": true, ".venv": true, "venv": true, "env": true,
+	"__pycache__": true, ".pytest_cache": true, ".mypy_cache": true, ".ruff_cache": true, ".tox": true,
+	".cache": true, "dist": true, "build": true, "target": true, ".next": true, ".nuxt": true,
+	".svelte-kit": true, ".astro": true, ".vitepress": true, ".docusaurus": true, "_site": true,
+	"coverage": true, "htmlcov": true, ".terraform": true, ".gradle": true, "Pods": true, "DerivedData": true,
+	".claude": true, ".cursor": true, ".gemini": true, ".codex": true, ".agent": true, ".agents": true,
+	".worktrees": true, "worktrees": true,
 }
 
 var nonTargetDirs = map[string]bool{
-	"test":       true,
-	"tests":      true,
-	"testing":    true,
-	"testdata":   true,
-	"e2e":        true,
-	"fixtures":   true,
-	"mocks":      true,
-	"mock":       true,
-	"bench":      true,
-	"benches":    true,
-	"benchmark":  true,
-	"benchmarks": true,
-	"doc":        true,
-	"docs":       true,
-	"example":    true,
-	"examples":   true,
-	"demo":       true,
-	"demos":      true,
-	"spikes":     true,
-	"assets":     true,
-	"static":     true,
-	"public":     true,
-	"fonts":      true,
-	"img":        true,
-	"images":     true,
-	"css":        true,
-	"styles":     true,
-	"templates":  true,
-	"licenses":   true,
-	"reports":    true,
-	"logs":       true,
-	"output":     true,
-	"processed":  true,
-	"cache":      true,
-	"contrib":    true,
-	"archived":   true,
+	"test": true, "tests": true, "testing": true, "testdata": true, "e2e": true, "fixtures": true,
+	"mocks": true, "mock": true, "bench": true, "benches": true, "benchmark": true, "benchmarks": true,
+	"doc": true, "docs": true, "example": true, "examples": true, "demo": true, "demos": true,
+	"spikes": true, "assets": true, "static": true, "public": true, "fonts": true, "img": true,
+	"images": true, "css": true, "styles": true, "templates": true, "licenses": true, "reports": true,
+	"logs": true, "output": true, "processed": true, "cache": true, "contrib": true, "archived": true,
 }
 
 var extLanguageMap = map[string]string{
-	".go":      "go",
-	".py":      "python",
-	".ts":      "typescript",
-	".tsx":     "typescript",
-	".js":      "javascript",
-	".jsx":     "javascript",
-	".cjs":     "javascript",
-	".mjs":     "javascript",
-	".rs":      "rust",
-	".c":       "c_cpp",
-	".cc":      "c_cpp",
-	".cpp":     "c_cpp",
-	".h":       "c_cpp",
-	".hpp":     "c_cpp",
-	".java":    "jvm",
-	".kt":      "jvm",
-	".swift":   "swift",
-	".php":     "php",
-	".rb":      "ruby",
-	".sh":      "shell",
-	".bash":    "shell",
-	".zsh":     "shell",
-	".astro":   "frontend",
-	".vue":     "frontend",
-	".svelte":  "frontend",
-	".gd":      "gdscript",
-	".cs":      "csharp",
-	".proto":   "idl",
-	".capnp":   "idl",
-	".thrift":  "idl",
-	".graphql": "idl",
-	".tf":      "terraform",
-	".hcl":     "terraform",
+	".go": "go", ".py": "python", ".ts": "typescript", ".tsx": "typescript",
+	".js": "javascript", ".jsx": "javascript", ".cjs": "javascript", ".mjs": "javascript",
+	".rs": "rust", ".c": "c_cpp", ".cc": "c_cpp", ".cpp": "c_cpp", ".h": "c_cpp", ".hpp": "c_cpp",
+	".java": "jvm", ".kt": "jvm", ".swift": "swift", ".php": "php", ".rb": "ruby",
+	".sh": "shell", ".bash": "shell", ".zsh": "shell",
+	".astro": "frontend", ".vue": "frontend", ".svelte": "frontend",
+	".gd": "gdscript", ".cs": "csharp",
+	".proto": "idl", ".capnp": "idl", ".thrift": "idl", ".graphql": "idl",
+	".tf": "terraform", ".hcl": "terraform",
 }
 
 var manifestFilenames = map[string]bool{
-	"go.mod":             true,
-	"package.json":       true,
-	"pyproject.toml":     true,
-	"Cargo.toml":         true,
-	"requirements.txt":   true,
-	"pom.xml":            true,
-	"composer.json":      true,
-	"Gemfile":            true,
-	"Package.swift":      true,
-	"Chart.yaml":         true,
-	"wrangler.toml":      true,
-	"wrangler.jsonc":     true,
-	"Dockerfile":         true,
-	"docker-compose.yml": true,
+	"go.mod": true, "package.json": true, "pyproject.toml": true, "Cargo.toml": true,
+	"requirements.txt": true, "pom.xml": true, "composer.json": true, "Gemfile": true,
+	"Package.swift": true, "Chart.yaml": true, "wrangler.toml": true, "wrangler.jsonc": true,
+	"Dockerfile": true, "docker-compose.yml": true,
 }
 
 var entrypointBaseTokens = []string{
@@ -163,19 +70,15 @@ var entrypointBaseTokens = []string{
 	"mcp", "entrypoint", "daemon", "worker", "proxy", "waf",
 }
 var entrypointTerminalTokens = map[string]bool{
-	"main":   true,
-	"app":    true,
-	"plugin": true,
-	"run":    true,
+	"main": true, "app": true, "plugin": true, "run": true,
 }
-var authBoundaryTokens = []string{"auth", "authentication", "jwt", "oauth", "oidc", "saml", "session", "middleware", "rbac", "acl", "bearer", "apikey", "serve_token", "auth_token"}
+var authBoundaryTokens = []string{
+	"auth", "authentication", "jwt", "oauth", "oidc", "saml", "session",
+	"middleware", "rbac", "acl", "bearer", "apikey", "serve_token", "auth_token",
+}
 
 var docExtensions = map[string]bool{
-	".md":   true,
-	".mdx":  true,
-	".txt":  true,
-	".rst":  true,
-	".adoc": true,
+	".md": true, ".mdx": true, ".txt": true, ".rst": true, ".adoc": true,
 }
 
 type companionRule struct {
@@ -204,7 +107,10 @@ var companionRules = []companionRule{
 			if hasPathToken(rel, "mcp", "prompt", "prompts", "llm", "agents", "openai", "rag") {
 				return true
 			}
-			if hasPathToken(rel, "agent") && !strings.Contains(lowerRel, "launchagent") && !strings.Contains(lowerRel, "useragent") && !strings.Contains(lowerRel, "user_agent") {
+			if hasPathToken(rel, "agent") &&
+				!strings.Contains(lowerRel, "launchagent") &&
+				!strings.Contains(lowerRel, "useragent") &&
+				!strings.Contains(lowerRel, "user_agent") {
 				return true
 			}
 			return false
@@ -216,7 +122,8 @@ var companionRules = []companionRule{
 		Match: func(rel, _, name, ext string) bool {
 			return extLanguageMap[ext] != "" &&
 				(hasPathToken(rel, authBoundaryTokens...) ||
-					hasPathToken(rel, "handler", "request", "response", "proxy", "waf", "clientip", "cors", "csrf", "mtls", "endpoint", "endpoints", "admin") ||
+					hasPathToken(rel, "handler", "request", "response", "proxy", "waf", "clientip") ||
+					hasPathToken(rel, "cors", "csrf", "mtls", "endpoint", "endpoints", "admin") ||
 					hasPathToken(name, "serve", "http", "rest"))
 		},
 	},
@@ -243,7 +150,9 @@ var companionRules = []companionRule{
 		Reason:     "Container, IaC, Kubernetes, or edge deployment manifests detected",
 		AllowInfra: true,
 		Match: func(rel, lowerRel, name, ext string) bool {
-			if strings.Contains(lowerRel, ".github/workflows/") || strings.Contains(lowerRel, ".gitlab-ci") || strings.HasSuffix(lowerRel, ".lock.hcl") {
+			if strings.Contains(lowerRel, ".github/workflows/") ||
+				strings.Contains(lowerRel, ".gitlab-ci") ||
+				strings.HasSuffix(lowerRel, ".lock.hcl") {
 				return false
 			}
 			return extLanguageMap[ext] == "terraform" || name == "Dockerfile" ||
@@ -267,7 +176,8 @@ var companionRules = []companionRule{
 			if lang == "" {
 				return false
 			}
-			if hasPathToken(rel, "tenant", "tenants", "export", "backup", "migration", "migrations", "db", "database", "sqlite", "postgres", "redis") {
+			if hasPathToken(rel, "tenant", "tenants", "export", "backup", "migration", "migrations") ||
+				hasPathToken(rel, "db", "database", "sqlite", "postgres", "redis") {
 				return true
 			}
 			if lang != "typescript" && lang != "javascript" && lang != "frontend" {

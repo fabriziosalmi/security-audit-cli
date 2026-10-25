@@ -151,7 +151,10 @@ func TestRegistryOneToOneParityAndDispatch(t *testing.T) {
 	for _, c := range all {
 		wantVS := "sec-audit." + c.Subcommand
 		if !vsCmdSet[wantVS] {
-			t.Fatalf("1:1:1 parity broken: CLI subcommand %q / MCP tool %q missing VS Code command %q in editors/vscode/package.json", c.Subcommand, c.ToolName, wantVS)
+			t.Fatalf(
+				"1:1:1 parity broken: CLI %q / MCP %q missing VS Code command %q in editors/vscode/package.json",
+				c.Subcommand, c.ToolName, wantVS,
+			)
 		}
 	}
 }

@@ -379,13 +379,16 @@ func Status(req StatusRequest) (*StatusResponse, error) {
 		actions = append(actions, fmt.Sprintf("submit pending hunter result(s) for %d in_progress unit(s)", len(inProgressIDs)))
 	}
 	if len(state.UncoveredQueue) > 0 {
-		actions = append(actions, fmt.Sprintf("assign and submit coverage critic to drain %d uncovered queue entry/entries", len(state.UncoveredQueue)))
+		msg := fmt.Sprintf("assign and submit coverage critic to drain %d uncovered queue entry/entries", len(state.UncoveredQueue))
+		actions = append(actions, msg)
 	}
 	if len(unvalidatedFPs) > 0 {
-		actions = append(actions, fmt.Sprintf("assign and submit Phase 3 verifier(s) for candidate fingerprint(s): %s", strings.Join(unvalidatedFPs, ", ")))
+		msg := fmt.Sprintf("assign and submit Phase 3 verifier(s) for candidate fingerprint(s): %s", strings.Join(unvalidatedFPs, ", "))
+		actions = append(actions, msg)
 	}
 	if len(unverifiedPhase5FPs) > 0 {
-		actions = append(actions, fmt.Sprintf("assign and submit Phase 5 record_verifier(s) for fingerprint(s): %s", strings.Join(unverifiedPhase5FPs, ", ")))
+		msg := fmt.Sprintf("assign and submit Phase 5 record_verifier(s) for fingerprint(s): %s", strings.Join(unverifiedPhase5FPs, ", "))
+		actions = append(actions, msg)
 	}
 	if len(driftedFiles) > 0 {
 		actions = append(actions, fmt.Sprintf("resolve source file drift on: %s", strings.Join(driftedFiles, ", ")))

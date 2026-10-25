@@ -98,13 +98,17 @@ var commands = []Command{
 		"ledger-seed",
 		"Derive canonical RFC 3986 coverage_ids, verify paths/blocks, seed ledger",
 		"Phase 1 coverage plan: derive canonical RFC 3986 coverage_ids, verify starting_paths "+
-			"on disk and block references against catalog, optionally carry over SHA-256 unchanged clean units, sort, validate, and write coverage-ledger.json.",
+			"on disk and block references against catalog, optionally carry over SHA-256 "+
+			"unchanged clean units, sort, validate, and write coverage-ledger.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"output_dir":          map[string]any{"type": "string"},
-				"units":               map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-				"carryover_unchanged": map[string]any{"type": "boolean", "description": "Automatically promote units whose starting_paths and reviewed_paths are SHA-256 unchanged from prior_run_dirs"},
+				"output_dir": map[string]any{"type": "string"},
+				"units":      map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+				"carryover_unchanged": map[string]any{
+					"type":        "boolean",
+					"description": "Automatically promote units whose starting_paths and reviewed_paths are SHA-256 unchanged from prior_run_dirs",
+				},
 			},
 			"required": []string{"output_dir", "units"},
 		},

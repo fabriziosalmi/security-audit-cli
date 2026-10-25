@@ -258,7 +258,10 @@ func SeedLedgerWithOptions(outputDir string, inputs []SeedUnitInput, carryoverUn
 		for _, blk := range in.SelectedCompanionBlocks {
 			if parts := strings.SplitN(blk, "#", 2); len(parts) == 2 && parts[0] != "ATTACK-CLASSES.md" {
 				if len(selectedFileSet) > 0 && !selectedFileSet[parts[0]] {
-					return nil, fmt.Errorf("unit[%d] selected_companion_block %q belongs to %q which is not in selected_companion_files %v", i, blk, parts[0], meta.SelectedCompanionFiles)
+					return nil, fmt.Errorf(
+						"unit[%d] selected_companion_block %q belongs to %q which is not in selected_companion_files %v",
+						i, blk, parts[0], meta.SelectedCompanionFiles,
+					)
 				}
 			}
 		}

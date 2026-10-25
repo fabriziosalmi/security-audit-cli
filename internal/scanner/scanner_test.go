@@ -207,7 +207,8 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 		t.Fatalf("expected AuthHelper.c in AuthBoundaryCandidates, got %+v", camelBrief.AuthBoundaryCandidates)
 	}
 	for _, ep := range camelBrief.EntrypointCandidates {
-		if strings.Contains(ep, "fulltext-index") || strings.Contains(ep, "app-version") || strings.Contains(ep, ".claude") || strings.Contains(ep, "dist-mcp") {
+		if strings.Contains(ep, "fulltext-index") || strings.Contains(ep, "app-version") ||
+			strings.Contains(ep, ".claude") || strings.Contains(ep, "dist-mcp") {
 			t.Fatalf("unexpected entrypoint candidate %q in %+v", ep, camelBrief.EntrypointCandidates)
 		}
 	}

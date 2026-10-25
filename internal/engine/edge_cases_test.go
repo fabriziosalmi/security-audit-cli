@@ -266,7 +266,10 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 		},
 		Hardening: []string{"Enable strict headers"},
 		Uncovered: []engine.UncoveredEntry{
-			{Surface: "other.go#B", Boundary: "other.go#B", Subsystem: "root", AttackClass: block, StartingPaths: []string{"other.go"}, Reason: "new"},
+			{
+				Surface: "other.go#B", Boundary: "other.go#B", Subsystem: "root",
+				AttackClass: block, StartingPaths: []string{"other.go"}, Reason: "new",
+			},
 		},
 	}); err != nil {
 		t.Fatalf("SubmitHunter quick: %v", err)

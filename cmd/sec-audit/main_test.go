@@ -208,7 +208,8 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	}
 
 	// 13. --carryover-unchanged and --fail-on flag parsing
-	rawCarry, err := parseSubcommandFlags("ledger-seed", []string{"--output-dir", outDir, "--carryover-unchanged", "--input", unitsFile}, strings.NewReader(""))
+	carryArgs := []string{"--output-dir", outDir, "--carryover-unchanged", "--input", unitsFile}
+	rawCarry, err := parseSubcommandFlags("ledger-seed", carryArgs, strings.NewReader(""))
 	if err != nil || !strings.Contains(string(rawCarry), `"carryover_unchanged":true`) {
 		t.Fatalf("expected --carryover-unchanged to set carryover_unchanged=true, got err=%v raw=%s", err, string(rawCarry))
 	}
