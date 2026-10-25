@@ -8,7 +8,7 @@
 
 Please do **not** open a public GitHub issue for security vulnerabilities.
 
-Email **fabrizio.salmi@gmail.com** with:
+Report vulnerabilities privately via [**GitHub Security Advisories**](https://github.com/fabriziosalmi/security-audit-cli/security/advisories/new) or email **fabrizio.salmi@gmail.com** with:
 - A clear description of the boundary violation or invariant bypass
 - Exact steps or input payloads to reproduce
 - Affected version or commit hash
@@ -19,10 +19,12 @@ You can expect an acknowledgement within 7 days. Coordinated disclosure is appre
 ## Threat Model and Enforced Boundaries
 
 - **Target Repository Containment (`*os.Root`)**: [`VerifyRepoFileAndLine`](internal/validator/common.go) opens the audited repository via `os.OpenRoot(targetDir)`, inspects every parent segment with `root.Lstat`, opens regular files with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, verifies `f.Stat()` on the opened descriptor, and bounds reads with `io.LimitReader(f, MaxInputBytes+1)`. Symlinks, FIFOs, device nodes, and path escapes outside `targetDir` are rejected by the OS kernel.
+- **Cryptographic Source-File Anti-Drift Pinning (`DetectSourceDrift`)**: [`VerifyAndPinSourceFiles`](internal/scanner/git.go) records the SHA-256 digest of every repository file cited by `hunter-submit` or `verifier-submit` in `.sec-audit-state.json`. [`ValidateRunWithGate`](internal/engine/phase6_render.go) fails closed if `.sec-audit-state.json` is missing and re-verifies every pinned file via `VerifyRepoFileAndLine` + `FileHashSHA256` before Phase 6 rendering.
 - **Race-Safe Artifact Promotion (`PromoteAllowlist`)**: [`PromoteAllowlist`](internal/promote/promote_unix.go) promotes files from an untrusted agent scratch directory (`<output-dir>/agents/<id>/scratch/`) into `<output-dir>/agents/<id>/artifacts/` using descriptor-relative `*os.Root` traversal, `O_NOFOLLOW | O_NONBLOCK`, `nlink == 1` (rejecting hardlinks), double-`Fstat` identity checks (`dev`/`ino`/`size`/`mtime`) before and after read, and strict per-file (`1 MiB`) and cumulative (`10 MiB`) byte caps.
 - **JSON Preflight Guards (`ValidateJSONPreflight`)**: [`ValidateJSONPreflight`](internal/validator/preflight.go) scans raw JSON streams in a single $O(N)$ pass before `json.Unmarshal`, enforcing `MaxNestingDepth (64)`, `MaxObjectFields (1000)`, `MaxPreflightValues (500000)`, and rejecting duplicate object keys at any nesting depth to prevent parser-differential smuggling.
 - **Crash-Safe Atomic Persistence (`WriteFileAtomic`)**: [`WriteFileAtomic`](internal/store/store.go) writes state files via temporary sibling files (`0600` inside `0700` directories), calls `Sync()`, and atomically renames over the destination path.
 - **MCP Transport (`ServeStdio`)**: [`ServeStdio`](internal/mcp/server.go) communicates exclusively over newline-delimited `stdio` JSON-RPC 2.0 (bounded to `5 MiB` per message) with no network listener.
+- **VS Code Extension Confinement (`resolveContainedPath`)**: [`editors/vscode/extension.js`](editors/vscode/extension.js) executes `sec-audit` strictly via `child_process.execFile` (argv array, no shell) and validates all opened file paths via `resolveContainedPath` + `fs.lstatSync` symlink rejection.
 - **Supply Chain Integrity (SLSA, Cosign, SBOM, Scorecard, CodeQL)**: All GitHub Actions are pinned to immutable 40-char commit SHAs with `persist-credentials: false` and maintained via [`.github/dependabot.yml`](.github/dependabot.yml). Releases ([`.github/workflows/release.yml`](.github/workflows/release.yml)) generate SPDX + CycloneDX SBOMs, sign `SHA256SUMS.txt` and SBOMs with keyless Sigstore Cosign OIDC (`cosign sign-blob --bundle`), and emit SLSA build provenance (`actions/attest-build-provenance`) and SBOM attestations (`actions/attest-sbom`). Continuous security analysis runs via [`.github/workflows/security.yml`](.github/workflows/security.yml) (CodeQL Go SAST + OpenSSF Scorecard) and `govulncheck` + 4 fuzz targets in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Troubleshooting: macOS Provenance and In-Place Binary Overwrites

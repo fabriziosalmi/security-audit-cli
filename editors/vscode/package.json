@@ -9,6 +9,21 @@
     "type": "git",
     "url": "https://github.com/fabriziosalmi/security-audit-cli.git"
   },
+  "homepage": "https://github.com/fabriziosalmi/security-audit-cli#readme",
+  "bugs": {
+    "url": "https://github.com/fabriziosalmi/security-audit-cli/issues"
+  },
+  "keywords": [
+    "security",
+    "security-audit",
+    "appsec",
+    "sast",
+    "sarif",
+    "mcp",
+    "ghsa",
+    "devsecops",
+    "sec-audit"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },

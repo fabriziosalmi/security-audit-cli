@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Report (Private)
+    url: https://github.com/fabriziosalmi/security-audit-cli/security/advisories/new
+    about: Report a security boundary bypass or vulnerability privately via GitHub Security Advisories (see SECURITY.md).
+  - name: Questions and Discussions
+    url: https://github.com/fabriziosalmi/security-audit-cli/discussions
+    about: Ask questions about audit workflows, MCP configuration, or custom playbooks.
