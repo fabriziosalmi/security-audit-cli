@@ -1,0 +1,4 @@
+/sec-audit
+*.test
+*.out
+.DS_Store
