@@ -54,6 +54,7 @@ var commands = []Command{
 				"output_dir":     map[string]any{"type": "string", "description": "Output directory outside target (or git-ignored inside target)"},
 				"profile":        map[string]any{"type": "string", "enum": []string{"quick", "standard", "deep"}},
 				"scope_paths":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"companions":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				"budget":         map[string]any{"type": "integer", "description": "Optional strict total agent invocation cap"},
 				"prior_run_dirs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			},

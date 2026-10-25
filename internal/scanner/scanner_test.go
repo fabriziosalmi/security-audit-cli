@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
@@ -134,5 +135,65 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 	docBrief := ScanRepository(docOnlyRepo)
 	if len(docBrief.RecommendedCompanions) != 0 || len(docBrief.AuthBoundaryCandidates) != 0 || len(docBrief.EntrypointCandidates) != 0 {
 		t.Fatalf("expected documentation files to not trigger companion rules or boundary candidates, got: %+v", docBrief)
+	}
+
+	// Token-boundary & non-target filtering: coverage.yml ("rag" substring), server/links.go, *_test.go, .claude/
+	precisionRepo := t.TempDir()
+	precFiles := map[string]string{
+		".github/workflows/coverage.yml": "name: Coverage\n",
+		".claude/settings.json":          "{}\n",
+		"server/links.go":                "package server\n",
+		"server/debug.go":                "package server\n",
+		"server/doctor_test.go":          "package server\n",
+		"tests/auth_helper.go":           "package tests\n",
+	}
+	for rel, content := range precFiles {
+		full := filepath.Join(precisionRepo, filepath.FromSlash(rel))
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		_ = os.WriteFile(full, []byte(content), 0o600)
+	}
+	precBrief := ScanRepository(precisionRepo)
+	for _, rc := range precBrief.RecommendedCompanions {
+		if rc.File == "AI-AND-LLM.md" || rc.File == "DATA-ISOLATION-AND-LIFECYCLE.md" || rc.File == "WEB-PROTOCOL-AND-AUTH.md" {
+			t.Fatalf("unexpected false-positive companion %q on precisionRepo: %+v", rc.File, rc)
+		}
+	}
+	if len(precBrief.EntrypointCandidates) != 0 || len(precBrief.AuthBoundaryCandidates) != 0 {
+		t.Fatalf("expected 0 entrypoint/auth candidates on precisionRepo, got: %+v", precBrief)
+	}
+	for _, sub := range precBrief.SuggestedSeedSubsystems {
+		if sub == ".claude" {
+			t.Fatalf("expected .claude dot-dir to be excluded from SuggestedSeedSubsystems")
+		}
+	}
+
+	// Verify CamelCase tokenization, .claude/worktrees exclusion, and terminal index/app matching
+	camelRepo := t.TempDir()
+	camelFiles := map[string]string{
+		".claude/worktrees/wt1/mcp/index.js": "console.log(1)\n",
+		"dist-mcp/index.cjs":                 "console.log(1)\n",
+		"proxymate/AuthHelper.c":             "int main() { return 0; }\n",
+		"proxymate/LocalProxy.swift":         "import Foundation\n",
+		"includes/API/BatchEndpoints.php":    "<?php\n",
+		"electron/fulltext-index.ts":         "export const x = 1;\n",
+		"electron/app-version.ts":            "export const v = '1';\n",
+		"mcp-server/index.ts":                "export const s = 1;\n",
+	}
+	for rel, content := range camelFiles {
+		full := filepath.Join(camelRepo, filepath.FromSlash(rel))
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		_ = os.WriteFile(full, []byte(content), 0o600)
+	}
+	camelBrief := ScanRepository(camelRepo)
+	if camelBrief.Languages["swift"] != 1 || camelBrief.Languages["php"] != 1 {
+		t.Fatalf("expected swift=1 and php=1, got %+v", camelBrief.Languages)
+	}
+	if len(camelBrief.AuthBoundaryCandidates) != 1 || camelBrief.AuthBoundaryCandidates[0] != "proxymate/AuthHelper.c" {
+		t.Fatalf("expected AuthHelper.c in AuthBoundaryCandidates, got %+v", camelBrief.AuthBoundaryCandidates)
+	}
+	for _, ep := range camelBrief.EntrypointCandidates {
+		if strings.Contains(ep, "fulltext-index") || strings.Contains(ep, "app-version") || strings.Contains(ep, ".claude") || strings.Contains(ep, "dist-mcp") {
+			t.Fatalf("unexpected entrypoint candidate %q in %+v", ep, camelBrief.EntrypointCandidates)
+		}
 	}
 }

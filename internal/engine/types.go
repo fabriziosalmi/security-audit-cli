@@ -24,6 +24,7 @@ type InitRequest struct {
 	OutputDir    string   `json:"output_dir,omitempty"`
 	Profile      string   `json:"profile,omitempty"`
 	ScopePaths   []string `json:"scope_paths,omitempty"`
+	Companions   []string `json:"companions,omitempty"`
 	Budget       *int     `json:"budget,omitempty"`
 	PriorRunDirs []string `json:"prior_run_dirs,omitempty"`
 }

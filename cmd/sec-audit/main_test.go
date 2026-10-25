@@ -161,7 +161,8 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	if _, err := parseSubcommandFlags("critic-submit", []string{"--input", symlinkInput}, strings.NewReader("")); err == nil {
 		t.Fatalf("expected parseSubcommandFlags to reject symlink --input file")
 	}
-	if _, err := parseSubcommandFlags("architecture", []string{"--output-dir", outDir, "--file", symlinkInput}, strings.NewReader("")); err == nil {
+	archSymArgs := []string{"--output-dir", outDir, "--file", symlinkInput}
+	if _, err := parseSubcommandFlags("architecture", archSymArgs, strings.NewReader("")); err == nil {
 		t.Fatalf("expected parseSubcommandFlags to reject symlink --file on architecture")
 	}
 
@@ -174,5 +175,11 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	oversizedReader := bytes.NewReader(bytes.Repeat([]byte("a"), validator.MaxInputBytes+10))
 	if _, err := parseSubcommandFlags("catalog", []string{"--json", "-"}, oversizedReader); err == nil {
 		t.Fatalf("expected parseSubcommandFlags to reject stdin exceeding MaxInputBytes")
+	}
+
+	// 9. Merging CLI flags (--output-dir) with --json object
+	mergedJSON, err := parseSubcommandFlags("ledger-seed", []string{"--output-dir", outDir, "--json", `{"units":[]}`}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(mergedJSON), outDir) {
+		t.Fatalf("expected --output-dir to merge into --json payload, got err=%v raw=%s", err, string(mergedJSON))
 	}
 }

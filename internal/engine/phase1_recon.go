@@ -83,8 +83,28 @@ func Init(req InitRequest) (*InitResponse, error) {
 
 	brief := scanner.ScanRepository(absTarget)
 	var companionNames []string
-	for _, rc := range brief.RecommendedCompanions {
-		companionNames = append(companionNames, rc.File)
+	if len(req.Companions) > 0 {
+		cat, err := spec.LoadCatalog()
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range req.Companions {
+			if c == "none" {
+				companionNames = []string{}
+				break
+			}
+			if _, ok := cat.Files[c]; !ok {
+				return nil, fmt.Errorf("unknown companion file %q in companions override", c)
+			}
+			companionNames = append(companionNames, c)
+		}
+	} else {
+		for _, rc := range brief.RecommendedCompanions {
+			companionNames = append(companionNames, rc.File)
+		}
+	}
+	if companionNames == nil {
+		companionNames = []string{}
 	}
 
 	// Strict pre-reconnaissance budget gate from SKILL.md
@@ -218,6 +238,18 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 	units := make([]validator.CoverageUnit, 0, len(inputs))
 	for i, in := range inputs {
 		refs := in.CanonicalRefs
+		if refs.Surface == "" && in.Surface != "" {
+			refs.Surface = in.Surface
+		}
+		if refs.Boundary == "" && in.Boundary != "" {
+			refs.Boundary = in.Boundary
+		}
+		if refs.Subsystem == "" && in.Subsystem != "" {
+			refs.Subsystem = in.Subsystem
+		}
+		if refs.AttackClass == "" && in.AttackClass != "" {
+			refs.AttackClass = in.AttackClass
+		}
 		if meta.Profile == "quick" {
 			refs.Subsystem = "profile/quick/all-in-scope-subsystems"
 		}

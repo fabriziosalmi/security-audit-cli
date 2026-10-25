@@ -74,6 +74,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	profile := fs.String("profile", "", "Audit profile (quick, standard, deep)")
 	budget := fs.Int("budget", -1, "Optional total agent invocation budget")
 	scopePaths := fs.String("scope-paths", "", "Comma-separated repository-relative scope paths")
+	companions := fs.String("companions", "", "Comma-separated companion files override (or 'none')")
 	priorRunDirs := fs.String("prior-run-dirs", "", "Comma-separated prior audit run directories")
 	fileFlag := fs.String("file", "", "Companion file name or content file path")
 	blockFlag := fs.String("block", "", "Canonical block reference (e.g. ATTACK-CLASSES.md#Injection)")
@@ -95,21 +96,67 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		return nil, err
 	}
 
+	payload := make(map[string]any)
+	unmarshalInputBytes := func(b []byte) error {
+		trimmed := strings.TrimSpace(string(b))
+		if sub == "ledger-seed" && strings.HasPrefix(trimmed, "[") {
+			var arr []any
+			if err := json.Unmarshal(b, &arr); err != nil {
+				return err
+			}
+			payload["units"] = arr
+		} else if (sub == "hunter-submit" || sub == "critic-submit") && !strings.Contains(trimmed, `"output_dir"`) && !strings.Contains(trimmed, `"result"`) {
+			var obj map[string]any
+			if err := json.Unmarshal(b, &obj); err != nil {
+				return err
+			}
+			payload["result"] = obj
+		} else if (sub == "verifier-submit" || sub == "record-verify-submit") && !strings.Contains(trimmed, `"output_dir"`) && !strings.Contains(trimmed, `"record"`) {
+			var obj map[string]any
+			if err := json.Unmarshal(b, &obj); err != nil {
+				return err
+			}
+			payload["record"] = obj
+		} else {
+			if err := json.Unmarshal(b, &payload); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	hasExtraFlags := *target != "" || *outputDir != "" || *profile != "" || *budget >= 0 ||
+		*scopePaths != "" || *companions != "" || *priorRunDirs != "" || *fileFlag != "" ||
+		*blockFlag != "" || *contentFlag != "" || *role != "" || *agentID != "" ||
+		*coverageIDs != "" || *fingerprint != "" || *filesList != "" || *maxFileBytes > 0 ||
+		*maxTotalBytes > 0 || *criticKind != "" || *decision != "" || *reason != "" ||
+		*ledgerPath != "" || *findingsPath != ""
+
 	if *jsonInput != "" {
+		var b []byte
 		if *jsonInput == "-" {
-			b, err := io.ReadAll(io.LimitReader(stdin, validator.MaxInputBytes+1))
+			var err error
+			b, err = io.ReadAll(io.LimitReader(stdin, validator.MaxInputBytes+1))
 			if err != nil {
 				return nil, err
 			}
 			if int64(len(b)) > validator.MaxInputBytes {
 				return nil, fmt.Errorf("stdin input exceeds %d byte limit", validator.MaxInputBytes)
 			}
+		} else {
+			b = []byte(*jsonInput)
+		}
+		if !hasExtraFlags {
 			return json.RawMessage(b), nil
 		}
-		return json.RawMessage(*jsonInput), nil
+		if err := validator.ValidateJSONPreflight(b); err != nil {
+			return nil, fmt.Errorf("invalid --json: %w", err)
+		}
+		if err := unmarshalInputBytes(b); err != nil {
+			return nil, err
+		}
 	}
 
-	payload := make(map[string]any)
 	if *inputFile != "" {
 		b, err := validator.ReadFileNoFollow(*inputFile)
 		if err != nil {
@@ -118,29 +165,8 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		if err := validator.ValidateJSONPreflight(b); err != nil {
 			return nil, fmt.Errorf("invalid --input %q: %w", *inputFile, err)
 		}
-		trimmed := strings.TrimSpace(string(b))
-		if sub == "ledger-seed" && strings.HasPrefix(trimmed, "[") {
-			var arr []any
-			if err := json.Unmarshal(b, &arr); err != nil {
-				return nil, err
-			}
-			payload["units"] = arr
-		} else if (sub == "hunter-submit" || sub == "critic-submit") && !strings.Contains(trimmed, `"output_dir"`) {
-			var obj map[string]any
-			if err := json.Unmarshal(b, &obj); err != nil {
-				return nil, err
-			}
-			payload["result"] = obj
-		} else if (sub == "verifier-submit" || sub == "record-verify-submit") && !strings.Contains(trimmed, `"output_dir"`) {
-			var obj map[string]any
-			if err := json.Unmarshal(b, &obj); err != nil {
-				return nil, err
-			}
-			payload["record"] = obj
-		} else {
-			if err := json.Unmarshal(b, &payload); err != nil {
-				return nil, err
-			}
+		if err := unmarshalInputBytes(b); err != nil {
+			return nil, err
 		}
 	}
 
@@ -168,6 +194,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		payload["budget"] = *budget
 	}
 	setSliceIfNotEmpty("scope_paths", *scopePaths)
+	setSliceIfNotEmpty("companions", *companions)
 	setSliceIfNotEmpty("prior_run_dirs", *priorRunDirs)
 	if sub == "catalog" {
 		setIfNotEmpty("file", *fileFlag)
