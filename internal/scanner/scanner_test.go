@@ -23,6 +23,11 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 		"proto/service.proto":          "syntax = \"proto3\";\n",
 		"ipc/unix_socket.go":           "package ipc\n",
 		".github/workflows/ci.yml":     "name: CI\n",
+		"scripts/run.py":               "print(1)\n",
+		"web/index.js":                 "export default 1;\n",
+		"rust/lib.rs":                  "pub fn f() {}\n",
+		"java/Main.java":               "class Main {}\n",
+		"infra/main.tf":                "resource \"null\" \"x\" {}\n",
 		"node_modules/ignored.js":      "console.log(1);\n",
 	}
 	for rel, content := range files {
@@ -36,8 +41,8 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 	}
 
 	brief := ScanRepository(repo)
-	if brief.TotalFiles != 11 { // node_modules is skipped
-		t.Fatalf("expected 11 scanned files (skipping node_modules), got %d", brief.TotalFiles)
+	if brief.TotalFiles != 16 { // node_modules is skipped
+		t.Fatalf("expected 16 scanned files (skipping node_modules), got %d", brief.TotalFiles)
 	}
 	if brief.Languages["go"] != 5 || brief.Languages["c_cpp"] != 1 || brief.Languages["typescript"] != 1 || brief.Languages["idl"] != 1 {
 		t.Fatalf("unexpected language counts: %+v", brief.Languages)
@@ -107,9 +112,17 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 		t.Fatalf("expected 2 carried candidate envelopes, got %d", len(carried))
 	}
 
-	// Test FileHashSHA256
+	// Test FileHashSHA256, ResolveGitRef, IsGitIgnored
 	h, err := FileHashSHA256(filepath.Join(repo, "go.mod"))
 	if err != nil || len(h) != 64 {
 		t.Fatalf("FileHashSHA256 failed: h=%q err=%v", h, err)
 	}
+	if _, err := FileHashSHA256(filepath.Join(repo, "missing.txt")); err == nil {
+		t.Fatalf("expected error on missing file hash")
+	}
+	ref, _ := ResolveGitRef(repo)
+	if ref != "unversioned" {
+		t.Fatalf("expected unversioned ref on non-git dir, got %s", ref)
+	}
+	_ = IsGitIgnored(repo, filepath.Join(repo, "node_modules"))
 }

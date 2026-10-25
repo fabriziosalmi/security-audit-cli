@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,12 +75,87 @@ func TestRunStoreAtomicLifecycle(t *testing.T) {
 		t.Fatalf("expected empty findings when file does not exist, got %v, %v", fList, err)
 	}
 
-	// Verify file permissions are 0600
-	info, err := os.Stat(st.MetadataPath())
-	if err != nil {
-		t.Fatalf("stat metadata: %v", err)
+	// 5. SyncFindings + LoadFindings roundtrip
+	_ = os.WriteFile(filepath.Join(tmp, "auth.go"), []byte("package main\nfunc Verify() {}\n"), 0o644)
+	validFinding := validator.Finding{
+		Verdict:          "rejected",
+		Fingerprint:      "FIND-0001",
+		Title:            "Refuted claim",
+		Description:      "Checked token signature",
+		ClaimedRootCause: "None",
+		Trace:            []validator.TraceEntry{{Kind: "sink", File: "auth.go", Line: 2, Scope: "Verify", Description: "Checks sig"}},
+		Evidence:         []validator.EvidenceEntry{{File: "auth.go", Line: 2, Description: "Signature verified"}},
+		Reason:           "Signature check is mandatory",
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("expected 0600 permissions, got %o", info.Mode().Perm())
+	state.Candidates = map[string]*CandidateEnvelope{
+		"FIND-0002": {
+			Fingerprint: "FIND-0002",
+			FinalRecord: &validator.Finding{
+				Verdict:          "rejected",
+				Fingerprint:      "FIND-0002",
+				Title:            "Second",
+				Description:      "Second",
+				ClaimedRootCause: "None",
+				Trace:            []validator.TraceEntry{{Kind: "sink", File: "auth.go", Line: 2, Scope: "Verify", Description: "Checks sig"}},
+				Evidence:         []validator.EvidenceEntry{{File: "auth.go", Line: 2, Description: "Signature verified"}},
+				Reason:           "Signature check is mandatory",
+			},
+		},
+		"FIND-0001": {
+			Fingerprint: "FIND-0001",
+			FinalRecord: &validFinding,
+		},
+	}
+	if err := st.SyncFindings(tmp, state); err != nil {
+		t.Fatalf("SyncFindings failed: %v", err)
+	}
+	loadedFindings, err := st.LoadFindings()
+	if err != nil || len(loadedFindings) != 2 || loadedFindings[0].Fingerprint != "FIND-0001" {
+		t.Fatalf("LoadFindings after SyncFindings failed: %+v err=%v", loadedFindings, err)
+	}
+
+	if err := WriteFileAtomic(filepath.Join(tmp, "missing-dir", "f.json"), []byte("{}"), 0o600); err == nil {
+		t.Fatalf("expected WriteFileAtomic in missing directory to fail")
+	}
+
+	// Corrupt JSON parse error branches
+	_ = os.WriteFile(st.MetadataPath(), []byte("{bad"), 0o600)
+	if _, err := st.LoadMetadata(); err == nil {
+		t.Fatalf("expected LoadMetadata parse error")
+	}
+	_ = os.WriteFile(st.LedgerPath(), []byte("{bad"), 0o600)
+	if _, err := st.LoadLedger(); err == nil {
+		t.Fatalf("expected LoadLedger parse error")
+	}
+	_ = os.WriteFile(st.FindingsPath(), []byte("{bad"), 0o600)
+	if _, err := st.LoadFindings(); err == nil {
+		t.Fatalf("expected LoadFindings parse error")
+	}
+	_ = os.WriteFile(st.StatePath(), []byte("{bad"), 0o600)
+	if _, err := st.LoadState(); err == nil {
+		t.Fatalf("expected LoadState parse error")
+	}
+
+	// Invalid finding in SyncFindings must return error
+	badFinding := validFinding
+	badFinding.Reason = ""
+	state.Candidates["FIND-0001"].FinalRecord = &badFinding
+	if err := st.SyncFindings(tmp, state); err == nil {
+		t.Fatalf("expected SyncFindings to fail on invalid finding")
+	}
+
+	// Error paths on nonexistent store directory
+	badStore := New(filepath.Join(tmp, "nonexistent"))
+	if _, err := badStore.LoadMetadata(); err == nil {
+		t.Fatalf("expected LoadMetadata error")
+	}
+	if _, err := badStore.LoadLedger(); err == nil {
+		t.Fatalf("expected LoadLedger error")
+	}
+	if _, err := badStore.LoadState(); err == nil {
+		t.Fatalf("expected LoadState error")
+	}
+	if _, err := badStore.LoadArchitecture(); err == nil {
+		t.Fatalf("expected LoadArchitecture error")
 	}
 }

@@ -237,37 +237,61 @@ func ReadFileNoFollow(path string) ([]byte, error) {
 	return data, nil
 }
 
-// VerifyRepoFileAndLine checks that relPath exists inside targetDir (without escaping via symlinks)
-// and, if line > 0, that 1 <= line <= number of lines in the file.
+// VerifyRepoFileAndLine checks that relPath exists inside targetDir using kernel-enforced *os.Root
+// (rejecting symlinks, FIFOs, devices, and directory escapes) and, if line > 0, that 1 <= line <= totalLines.
 func VerifyRepoFileAndLine(targetDir, relPath string, line int) error {
 	if !IsSafeRelativePath(relPath) {
 		return fmt.Errorf("invalid repository-relative path %q", relPath)
 	}
-	absTarget, err := filepath.EvalSymlinks(targetDir)
+	root, err := os.OpenRoot(targetDir)
 	if err != nil {
-		return fmt.Errorf("resolve target dir: %w", err)
+		return fmt.Errorf("open target root: %w", err)
 	}
-	joined := filepath.Join(absTarget, filepath.FromSlash(relPath))
-	resolved, err := filepath.EvalSymlinks(joined)
+	defer root.Close()
+
+	// Walk parent segments to ensure no intermediate symlink or non-directory exists
+	segments := strings.Split(relPath, "/")
+	for i := 0; i < len(segments)-1; i++ {
+		prefix := filepath.FromSlash(strings.Join(segments[:i+1], "/"))
+		fi, lerr := root.Lstat(prefix)
+		if lerr != nil {
+			return fmt.Errorf("source path %q does not exist in target repository", relPath)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return fmt.Errorf("source path %q traverses a symlink or non-directory component", relPath)
+		}
+	}
+
+	osRel := filepath.FromSlash(relPath)
+	info, err := root.Lstat(osRel)
 	if err != nil {
 		return fmt.Errorf("source path %q does not exist in target repository", relPath)
 	}
-	relToTarget, err := filepath.Rel(absTarget, resolved)
-	if err != nil || strings.HasPrefix(relToTarget, "..") || relToTarget == "." {
-		return fmt.Errorf("source path %q escapes target repository", relPath)
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("source path %q must not be a symlink", relPath)
 	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return fmt.Errorf("stat %q: %w", relPath, err)
+	if !info.IsDir() && !info.Mode().IsRegular() {
+		return fmt.Errorf("source path %q must be a regular file or directory", relPath)
 	}
+
 	if line > 0 {
 		if info.IsDir() {
 			return fmt.Errorf("source path %q is a directory, cannot cite line %d", relPath, line)
 		}
-		content, err := os.ReadFile(resolved)
+		if info.Size() > MaxInputBytes {
+			return fmt.Errorf("source path %q exceeds %d byte limit", relPath, MaxInputBytes)
+		}
+		f, err := root.OpenFile(osRel, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if err != nil {
+			return fmt.Errorf("open %q: %w", relPath, err)
+		}
+		defer f.Close()
+
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(f); err != nil {
 			return fmt.Errorf("read %q: %w", relPath, err)
 		}
+		content := buf.Bytes()
 		lineCount := bytes.Count(content, []byte{'\n'}) + 1
 		if len(content) == 0 {
 			lineCount = 0
