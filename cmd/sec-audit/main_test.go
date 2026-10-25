@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
 func TestCLIRunnerAndFlagParsing(t *testing.T) {
@@ -151,5 +153,26 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	code = run([]string{"mcp"}, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`+"\n"), &stdout, &stderr)
 	if code != 0 || json.Unmarshal(stdout.Bytes(), &mcpResp) != nil {
 		t.Fatalf("mcp CLI failed: code=%d out=%s", code, stdout.String())
+	}
+
+	// 8. Break-tests for FIND-0002 & FIND-0003: symlink --input, duplicate-key --input, and oversized --json -
+	symlinkInput := filepath.Join(tmpInputDir, "symlink-input.json")
+	_ = os.Symlink(objFile, symlinkInput)
+	if _, err := parseSubcommandFlags("critic-submit", []string{"--input", symlinkInput}, strings.NewReader("")); err == nil {
+		t.Fatalf("expected parseSubcommandFlags to reject symlink --input file")
+	}
+	if _, err := parseSubcommandFlags("architecture", []string{"--output-dir", outDir, "--file", symlinkInput}, strings.NewReader("")); err == nil {
+		t.Fatalf("expected parseSubcommandFlags to reject symlink --file on architecture")
+	}
+
+	dupInputFile := filepath.Join(tmpInputDir, "dup-input.json")
+	_ = os.WriteFile(dupInputFile, []byte(`{"stop":false,"stop":true}`), 0o600)
+	if _, err := parseSubcommandFlags("critic-submit", []string{"--input", dupInputFile}, strings.NewReader("")); err == nil {
+		t.Fatalf("expected parseSubcommandFlags to reject duplicate JSON keys in --input file")
+	}
+
+	oversizedReader := bytes.NewReader(bytes.Repeat([]byte("a"), validator.MaxInputBytes+10))
+	if _, err := parseSubcommandFlags("catalog", []string{"--json", "-"}, oversizedReader); err == nil {
+		t.Fatalf("expected parseSubcommandFlags to reject stdin exceeding MaxInputBytes")
 	}
 }

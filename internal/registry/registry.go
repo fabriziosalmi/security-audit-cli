@@ -25,6 +25,9 @@ func Bind[Req any, Resp any](fn func(Req) (Resp, error)) func(json.RawMessage) (
 	return func(raw json.RawMessage) (any, error) {
 		var req Req
 		if len(raw) > 0 {
+			if err := validator.ValidateJSONPreflight(raw); err != nil {
+				return nil, fmt.Errorf("json preflight failed: %w", err)
+			}
 			if err := json.Unmarshal(raw, &req); err != nil {
 				return nil, err
 			}

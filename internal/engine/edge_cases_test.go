@@ -249,6 +249,30 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 		Check: &validator.LocalCheck{
 			ReviewedPaths: []string{"src/a.go"},
 			Invariant:     "Verifier check",
+			Method:        "invalid_method",
+			Result:        "Refuted",
+		},
+	}); err == nil {
+		t.Fatalf("expected SubmitVerifier to reject malformed local check with invalid method")
+	}
+	if _, err := engine.SubmitVerifier(engine.VerifierSubmitRequest{
+		OutputDir:   quickOut,
+		AgentID:     "q-verifier",
+		Fingerprint: "FIND-Q1",
+		Decision:    "rejected",
+		Record: map[string]any{
+			"verdict":            "rejected",
+			"fingerprint":        "FIND-Q1",
+			"title":              "Lead",
+			"description":        "Desc",
+			"claimed_root_cause": "Root",
+			"trace":              qTrace,
+			"evidence":           []map[string]any{{"file": "src/a.go", "line": 1, "description": "e"}},
+			"reason":             "Sanitized upstream",
+		},
+		Check: &validator.LocalCheck{
+			ReviewedPaths: []string{"src/a.go"},
+			Invariant:     "Verifier check",
 			Method:        "source",
 			Result:        "Refuted",
 		},

@@ -10,6 +10,7 @@ import (
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/mcp"
 	"github.com/fabriziosalmi/security-audit-cli/internal/registry"
+	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
 func main() {
@@ -96,17 +97,26 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 
 	if *jsonInput != "" {
 		if *jsonInput == "-" {
-			b, err := io.ReadAll(stdin)
-			return json.RawMessage(b), err
+			b, err := io.ReadAll(io.LimitReader(stdin, validator.MaxInputBytes+1))
+			if err != nil {
+				return nil, err
+			}
+			if int64(len(b)) > validator.MaxInputBytes {
+				return nil, fmt.Errorf("stdin input exceeds %d byte limit", validator.MaxInputBytes)
+			}
+			return json.RawMessage(b), nil
 		}
 		return json.RawMessage(*jsonInput), nil
 	}
 
 	payload := make(map[string]any)
 	if *inputFile != "" {
-		b, err := os.ReadFile(*inputFile)
+		b, err := validator.ReadFileNoFollow(*inputFile)
 		if err != nil {
 			return nil, fmt.Errorf("read --input %q: %w", *inputFile, err)
+		}
+		if err := validator.ValidateJSONPreflight(b); err != nil {
+			return nil, fmt.Errorf("invalid --input %q: %w", *inputFile, err)
 		}
 		trimmed := strings.TrimSpace(string(b))
 		if sub == "ledger-seed" && strings.HasPrefix(trimmed, "[") {
@@ -167,7 +177,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		if *contentFlag != "" {
 			payload["content"] = *contentFlag
 		} else if *fileFlag != "" {
-			b, err := os.ReadFile(*fileFlag)
+			b, err := validator.ReadFileNoFollow(*fileFlag)
 			if err != nil {
 				return nil, err
 			}

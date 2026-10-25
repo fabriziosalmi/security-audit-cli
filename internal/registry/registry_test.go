@@ -122,4 +122,10 @@ func TestRegistryOneToOneParityAndDispatch(t *testing.T) {
 	if _, err := DispatchTool("sec_audit_nonexistent", nil); err == nil {
 		t.Fatalf("expected error on unknown tool")
 	}
+
+	// Break-test FIND-0002: duplicate JSON keys in outer request envelope must be rejected by registry.Bind
+	dupPayload := json.RawMessage(`{"file":"AI-AND-LLM.md","file":"ATTACK-CLASSES.md"}`)
+	if _, err := DispatchSubcommand("catalog", dupPayload); err == nil {
+		t.Fatalf("expected registry.Bind to reject duplicate JSON keys in outer request envelope")
+	}
 }

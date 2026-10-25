@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
 	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
@@ -62,6 +63,11 @@ func SubmitVerifier(req VerifierSubmitRequest) (map[string]any, error) {
 		return nil, err
 	}
 	if req.Check != nil {
+		cat, err := spec.LoadCatalog()
+		if err != nil {
+			return nil, err
+		}
+		validBlocks := cat.ValidBlockMap()
 		req.Check.AgentID = req.AgentID
 		linkedSet := make(map[string]bool)
 		for _, cid := range env.LinkedUnits {
@@ -79,6 +85,13 @@ func SubmitVerifier(req VerifierSubmitRequest) (map[string]any, error) {
 				u.LocalChecks = append(u.LocalChecks, *req.Check)
 				u.ReviewedPaths = uniqueStrings(append(u.ReviewedPaths, req.Check.ReviewedPaths...))
 			}
+		}
+		rawLedger, err := json.MarshalIndent(units, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if ledgerErrs := validator.ValidateCoverageLedgerBytes(rawLedger, meta.Target, req.OutputDir, validBlocks); len(ledgerErrs) > 0 {
+			return nil, fmt.Errorf("verifier check failed coverage-ledger validation: %s", strings.Join(ledgerErrs, "; "))
 		}
 		if err := rs.SaveLedger(units); err != nil {
 			return nil, err
