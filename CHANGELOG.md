@@ -6,6 +6,29 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-25
+
+### Added
+
+- **CamelCase / PascalCase Token Splitting & Expanded Language Coverage (`internal/scanner`)**:
+  - Added `splitIdentifierTokens` to decompose CamelCase, PascalCase, and acronym boundaries (`PrivilegedHelper.swift`, `PACServer.swift`, `AuthHelper.c`, `BatchEndpoints.php`).
+  - Added `.swift`, `.php`, `.rb`, `.sh`/`.bash`/`.zsh`, `.astro`, `.vue`, `.svelte`, `.gd`, `.cs` to `extLanguageMap`, `.mdx` to `docExtensions`, and `Package.swift`, `composer.json`, `Gemfile`, `Chart.yaml`, `wrangler.toml`, `wrangler.jsonc` to `manifestNames` (verified across 96 repositories in `3.19s`).
+- **Explicit Companion Override & Auto-Derived Canonical References (`cmd/sec-audit`, `internal/engine`)**:
+  - Added `--companions` flag to `sec-audit init` (`InitRequest.Companions`) for deterministic companion playbook selection.
+  - Auto-derived `canonical_refs` in `SeedLedger` from top-level `surface`, `boundary`, `subsystem`, and `attack_class` when omitted.
+  - Enabled merging CLI flags (such as `--output-dir`) into `--json` object payloads in `parseSubcommandFlags`.
+
+### Fixed
+
+- **Hardened Input & File-Read Boundaries (`FIND-0002` through `FIND-0007`, discovered via self-dogfooding Rounds 2–4)**:
+  - Enforced `validator.ReadFileNoFollow` (`O_NOFOLLOW`, regular-file verification, and `MaxInputBytes` cap) across all CLI input flags (`--input`, `--file`) and `store.ReadJSON`.
+  - Applied `ValidateJSONPreflight` inside generic `registry.Bind` so all CLI subcommands and MCP tools reject duplicate JSON keys (RFC 8259) and excessive nesting before `json.Unmarshal`.
+  - Enforced `io.LimitReader(r, validator.MaxInputBytes+1)` on `stdio` MCP frames and `--json -` stdin reads.
+  - Hardened `ValidateOutputDirNotInsideTarget` using `filepath.Rel` after symlink resolution and verified `local_check.reviewed_paths` in `SubmitVerifier`.
+- **AI Worktree Pruning & Companion Precision (`internal/scanner`)**:
+  - Ignored `.claude`, `.cursor`, `.gemini`, `.codex`, `.worktrees`, `worktrees`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.vitepress`, `.astro`, `_site`, `.terraform`, `dist-*`, `build-*`, `*.xcodeproj`, and `*.xcworkspace` during repository walks.
+  - Prevented `LaunchAgent` and `user_agent` identifiers from triggering `AI-AND-LLM.md`, Go `*_unix.go` build-tag files from triggering `DESKTOP-MOBILE-AND-LOCAL-IPC.md`, and LLM `token_counter` files from triggering false-positive `auth_boundary_candidates`.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added
