@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/scanner"
 	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
 	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
@@ -62,6 +63,20 @@ func SubmitVerifier(req VerifierSubmitRequest) (map[string]any, error) {
 	errs := validator.ValidateSingleFinding(finding, req.Record, "$", meta.Target, false)
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("verifier record failed schema/source validation: %s", strings.Join(errs, "; "))
+	}
+
+	var citedPaths []string
+	for _, t := range finding.Trace {
+		citedPaths = append(citedPaths, t.File)
+	}
+	for _, ev := range finding.Evidence {
+		citedPaths = append(citedPaths, ev.File)
+	}
+	if req.Check != nil {
+		citedPaths = append(citedPaths, req.Check.ReviewedPaths...)
+	}
+	if err := scanner.VerifyAndPinSourceFiles(meta.Target, state, citedPaths); err != nil {
+		return nil, err
 	}
 
 	units, err := rs.LoadLedger()
@@ -170,6 +185,16 @@ func SubmitRecordVerifier(req RecordVerifySubmitRequest) (map[string]any, error)
 	materialReplacement := false
 	switch req.Decision {
 	case "verified":
+		var citedPaths []string
+		for _, t := range env.FinalRecord.Trace {
+			citedPaths = append(citedPaths, t.File)
+		}
+		for _, ev := range env.FinalRecord.Evidence {
+			citedPaths = append(citedPaths, ev.File)
+		}
+		if err := scanner.VerifyAndPinSourceFiles(meta.Target, state, citedPaths); err != nil {
+			return nil, err
+		}
 		env.Phase5VerifierIDs = append(env.Phase5VerifierIDs, req.AgentID)
 		env.Phase5Verified = true
 		env.NeedsFreshVerify = false
@@ -194,6 +219,16 @@ func SubmitRecordVerifier(req RecordVerifySubmitRequest) (map[string]any, error)
 		errs := validator.ValidateSingleFinding(newFinding, req.Record, "$", meta.Target, false)
 		if len(errs) > 0 {
 			return nil, fmt.Errorf("replacement record failed validation: %s", strings.Join(errs, "; "))
+		}
+		var citedPaths []string
+		for _, t := range newFinding.Trace {
+			citedPaths = append(citedPaths, t.File)
+		}
+		for _, ev := range newFinding.Evidence {
+			citedPaths = append(citedPaths, ev.File)
+		}
+		if err := scanner.VerifyAndPinSourceFiles(meta.Target, state, citedPaths); err != nil {
+			return nil, err
 		}
 
 		materialReplacement = IsMaterialReplacement(*env.FinalRecord, newFinding)

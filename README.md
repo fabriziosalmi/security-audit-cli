@@ -1,7 +1,7 @@
 # sec-audit
 
 [![ci](https://img.shields.io/badge/ci-passing-brightgreen)](.github/workflows/ci.yml)
-[![release](https://img.shields.io/badge/release-v0.1.2-blue)](CHANGELOG.md)
+[![release](https://img.shields.io/badge/release-v0.1.3-blue)](CHANGELOG.md)
 [![go.mod](https://img.shields.io/badge/go-1.24%2B-00ADD8)](go.mod)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -9,7 +9,7 @@
 
 Built on the methodology and embedded domain playbooks of [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit), `sec-audit` replaces prompt-only instructions with hard programmatic gates: every coverage unit, source citation, local verification check, adversarial role transition, and final report artifact is verified on disk before the state machine advances.
 
-One binary. Go 1.24+ standard library only. Zero external dependencies. Strict 1:1 parity between CLI subcommands and MCP tools via a single generic command registry.
+One binary. Go 1.24+ standard library only. Zero external dependencies. Strict **1:1:1 parity** across CLI subcommands, MCP tools, and the optional VS Code / Cursor / Antigravity extension (`editors/vscode/`) via a single generic command registry.
 
 ---
 
@@ -74,15 +74,16 @@ Every subcommand accepts either CLI flags, `--input <path.json>`, or `--json '<r
 | **1** | `sec-audit init` | `sec_audit_init` | Verifies `output_dir` is outside `target` (or git-ignored), enforces pre-recon budget reserve (`>= 6` for `quick`, `>= 7` for `standard`/`deep`), scans repository languages/manifests/companions, and evaluates prior-run carryovers. |
 | **1-2** | `sec-audit catalog` | `sec_audit_catalog` | Lists embedded companion playbooks or returns the verbatim Markdown and `When to use` guidance for any canonical `FILE.md#Heading` reference. |
 | **1** | `sec-audit architecture` | `sec_audit_architecture` | Validates visible prose and the ~1,000-word limit (`<= 1,100` words hard cap), then atomically writes `<output-dir>/architecture.md`. |
-| **1** | `sec-audit ledger-seed` | `sec_audit_ledger_seed` | Derives RFC 3986 + Unicode NFC `coverage_id` values, verifies `starting_paths` inside `target` via `*os.Root`, checks companion block coverage against `selected_companion_files`, sorts units lexicographically, and writes `coverage-ledger.json`. |
+| **1** | `sec-audit ledger-seed` | `sec_audit_ledger_seed` | Derives RFC 3986 + Unicode NFC `coverage_id` values, verifies `starting_paths` inside `target` via `*os.Root`, optionally carries over SHA-256 unchanged clean units (`--carryover-unchanged`), sorts units lexicographically, and writes `coverage-ledger.json`. |
 | **1-5** | `sec-audit agent-assign` | `sec_audit_agent_assign` | Validates canonical lowercase `agent_id`, enforces budget reserves for remaining critics/verifiers, enforces adversarial role separation, creates `agents/<id>/scratch` and `artifacts`, and compiles the role prompt. |
 | **2-5** | `sec-audit artifact-promote` | `sec_audit_artifact_promote` | Executes 11-step OS race-safe promotion from `agents/<id>/scratch` to `agents/<id>/artifacts` using `*os.Root`, `O_NOFOLLOW \| O_NONBLOCK`, `nlink == 1`, double-`Fstat`, and byte caps. |
-| **2** | `sec-audit hunter-submit` | `sec_audit_hunter_submit` | Verifies every unit's `reviewed_paths` exist in `target` and cover `starting_paths`, verifies check ownership and promoted artifacts, validates candidate schema, and updates `coverage-ledger.json`. |
+| **2** | `sec-audit hunter-submit` | `sec_audit_hunter_submit` | Verifies every unit's `reviewed_paths` exist in `target` and cover `starting_paths`, pins source file SHA-256 digests, verifies check ownership and promoted artifacts, validates candidate schema, and updates `coverage-ledger.json`. |
 | **2** | `sec-audit critic-submit` | `sec_audit_critic_submit` | Archives reopened units into `attempts[]` with `reassignment_reason`, inserts `missing_units`, records `resolved_prior_leads`, and tracks `post_wave` and `final_clean` completion. |
-| **3** | `sec-audit verifier-submit` | `sec_audit_verifier_submit` | Enforces `verifier != hunter`, validates final `confirmed`, `needs_validation`, or `rejected` record against `report-schema.json` and on-disk `file:line` citations, and updates `findings.json`. |
+| **3** | `sec-audit verifier-submit` | `sec_audit_verifier_submit` | Enforces `verifier != hunter`, validates final `confirmed`, `needs_validation`, or `rejected` record against `report-schema.json` and on-disk `file:line` citations, pins source file SHA-256 digests, and updates `findings.json`. |
 | **5** | `sec-audit record-verify-submit` | `sec_audit_record_verify_submit` | Enforces 3-way independence (`record_verifier != hunter` and `record_verifier != verifier`); if a material replacement is submitted, requires another fresh `record_verifier` before Phase 6. |
-| **5-6** | `sec-audit validate` | `sec_audit_validate` | Runs single-pass $O(N)$ JSON preflight, `ValidateCoverageLedgerBytes`, `ValidateFindingsBytes`, and `ValidateCrossFileConsistency`. Exits with code `1` if `valid == false`. |
-| **6** | `sec-audit render` | `sec_audit_render` | Blocks if any validation, critic, or Phase 5 invariant is unsatisfied; writes `REPORT.md`, `FINDINGS-DETAIL.md`, `NEEDS-VALIDATION.md`, `findings.sarif`, and `manifest.sha256`. |
+| **5-6** | `sec-audit validate` | `sec_audit_validate` | Runs single-pass $O(N)$ JSON preflight, `ValidateCoverageLedgerBytes`, `ValidateFindingsBytes`, `ValidateCrossFileConsistency`, source file SHA-256 drift verification, and optional `--fail-on` CI threshold gate. |
+| **6** | `sec-audit render` | `sec_audit_render` | Blocks if any validation, critic, source-drift, or Phase 5 invariant is unsatisfied; writes `REPORT.md`, `FINDINGS-DETAIL.md`, `NEEDS-VALIDATION.md`, `advisories/GHSA-*.md`, `findings.sarif`, and `manifest.sha256`. |
+| **1-6** | `sec-audit status` | `sec_audit_status` | Returns a compact zero-token summary of unit counts, unvalidated candidates, unverified Phase 5 records, source file SHA-256 drift, and the exact `next_required_actions[]` to reach `render`. |
 
 ---
 
@@ -265,7 +266,8 @@ Every completed audit run in `<output-dir>` produces 8 canonical files verified 
 | `FINDINGS-DETAIL.md` | Full source trace (`entrypoint -> propagation* -> sink`), evidence citations, preconditions, reproduction instructions, and code fixes. |
 | `NEEDS-VALIDATION.md` | Unresolved leads requiring external environment or deployment validation, including validation plans and blockers. |
 | `findings.sarif` | SARIF 2.1.0 report mapping confirmed findings and source locations for GitHub Code Scanning and static analysis pipelines. |
-| `manifest.sha256` | Standard `sha256sum -c` / `shasum -a 256 -c` manifest of all 8 canonical artifacts above. |
+| `advisories/GHSA-<fingerprint>.md` | Standalone Coordinated Disclosure / GitHub Security Advisory Markdown documents generated for each confirmed finding. |
+| `manifest.sha256` | Standard `sha256sum -c` / `shasum -a 256 -c` manifest of all canonical artifacts and advisories above. |
 
 ---
 

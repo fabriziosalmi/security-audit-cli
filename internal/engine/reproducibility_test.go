@@ -331,18 +331,25 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 		}
 	}
 
-	// Render and verify manifest.sha256 entries against on-disk SHA-256 digests
-	rRes, err := engine.Render(engine.RenderRequest{OutputDir: outDir})
-	if err != nil || rRes.ConfirmedCount != 2 {
+	// Render and verify manifest.sha256 entries (8 base files + 2 GHSA advisories = 10) against on-disk SHA-256 digests
+	stBeforeRender, err := engine.Status(engine.StatusRequest{OutputDir: outDir})
+	if err != nil || !stBeforeRender.ReadyToRender {
+		t.Fatalf("expected Status ReadyToRender=true, got %+v err=%v", stBeforeRender, err)
+	}
+	rRes, err := engine.Render(engine.RenderRequest{OutputDir: outDir, FailOn: "high"})
+	if err != nil || rRes.ConfirmedCount != 2 || len(rRes.AdvisoryPaths) != 2 {
 		t.Fatalf("Render failed: %+v err=%v", rRes, err)
+	}
+	if rRes.GatePassed {
+		t.Fatalf("expected FailOn=high to set GatePassed=false when 2 high findings exist")
 	}
 	manifestBytes, err := os.ReadFile(rRes.ManifestPath)
 	if err != nil {
 		t.Fatalf("read manifest.sha256: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(manifestBytes)), "\n")
-	if len(lines) != 8 {
-		t.Fatalf("expected 8 lines in manifest.sha256, got %d", len(lines))
+	if len(lines) != 10 {
+		t.Fatalf("expected 10 lines in manifest.sha256 (8 base + 2 GHSA advisories), got %d", len(lines))
 	}
 	for _, line := range lines {
 		parts := strings.Split(line, "  ")
@@ -353,6 +360,100 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 		if herr != nil || actualHash != parts[0] {
 			t.Fatalf("manifest hash mismatch for %s: want %s got %s", parts[1], parts[0], actualHash)
 		}
+	}
+
+	// Break-test: mutating a pinned source file after review must trigger source_drift_detected in ValidateRun and Status
+	if err := os.WriteFile(filepath.Join(target, "src/api.go"), []byte("package api\nfunc Handle() { /* tampered */ }\n"), 0o600); err != nil {
+		t.Fatalf("tamper src/api.go: %v", err)
+	}
+	valAfterDrift, err := engine.ValidateRunWithGate(outDir, "critical")
+	if err != nil {
+		t.Fatalf("ValidateRunWithGate error: %v", err)
+	}
+	if valid, _ := valAfterDrift["valid"].(bool); valid {
+		t.Fatalf("expected ValidateRunWithGate to fail after source file SHA-256 drift")
+	}
+	stAfterDrift, err := engine.Status(engine.StatusRequest{OutputDir: outDir})
+	if err != nil || stAfterDrift.ReadyToRender || len(stAfterDrift.SourceDriftFiles) != 1 || stAfterDrift.SourceDriftFiles[0] != "src/api.go" {
+		t.Fatalf("expected Status to report source drift on src/api.go, got %+v err=%v", stAfterDrift, err)
+	}
+}
+
+func TestCarryoverUnchangedUnitsAndFailOnGates(t *testing.T) {
+	target := t.TempDir()
+	srcContent := []byte("package main\nfunc Clean() {}\n")
+	if err := os.WriteFile(filepath.Join(target, "clean.go"), srcContent, 0o600); err != nil {
+		t.Fatalf("write clean.go: %v", err)
+	}
+
+	// Run 1: cleanly cover clean.go
+	run1Dir := filepath.Join(t.TempDir(), "run-1")
+	if _, err := engine.Init(engine.InitRequest{Target: target, OutputDir: run1Dir, Profile: "quick"}); err != nil {
+		t.Fatalf("Init run1: %v", err)
+	}
+	if _, err := engine.WriteArchitecture(run1Dir, "# Arch\nClean."); err != nil {
+		t.Fatalf("WriteArchitecture run1: %v", err)
+	}
+	atk := "ATTACK-CLASSES.md#Injection"
+	seedInput := []engine.SeedUnitInput{
+		{
+			CanonicalRefs:            validator.CanonicalRefs{Surface: "clean.go#Clean", Boundary: "clean.go#Clean", Subsystem: "core", AttackClass: atk},
+			Surface:                  "Clean",
+			Boundary:                 "Clean",
+			Subsystem:                "core",
+			AttackClass:              "Injection",
+			StartingPaths:            []string{"clean.go"},
+			OrdinaryAttackClassBlock: &atk,
+			SelectedCompanionBlocks:  []string{},
+			ExcludedBlocks:           []validator.ExcludedBlock{},
+		},
+	}
+	units1, err := engine.SeedLedger(run1Dir, seedInput)
+	if err != nil {
+		t.Fatalf("SeedLedger run1: %v", err)
+	}
+	cid := units1[0].CoverageID
+	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
+		OutputDir: run1Dir, Role: "hunter", AgentID: "hunt-1", CoverageIDs: []string{cid},
+	}); err != nil {
+		t.Fatalf("AssignAgent hunt-1: %v", err)
+	}
+	if _, err := engine.SubmitHunter(run1Dir, "hunt-1", engine.HunterStructuredResult{
+		Units: []engine.HunterUnitResult{
+			{
+				CoverageID:    cid,
+				Disposition:   "covered",
+				ReviewedPaths: []string{"clean.go"},
+				Checks: []validator.LocalCheck{
+					{AgentID: "hunt-1", ReviewedPaths: []string{"clean.go"}, Invariant: "No untrusted input reaches sink", Method: "source", Result: "clean"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("SubmitHunter hunt-1: %v", err)
+	}
+
+	// Run 2: initialize with prior_run_dirs=[run1Dir] and seed with CarryoverUnchanged=true
+	run2Dir := filepath.Join(t.TempDir(), "run-2")
+	if _, err := engine.Init(engine.InitRequest{
+		Target: target, OutputDir: run2Dir, Profile: "quick", PriorRunDirs: []string{run1Dir},
+	}); err != nil {
+		t.Fatalf("Init run2: %v", err)
+	}
+	if _, err := engine.WriteArchitecture(run2Dir, "# Arch\nIncremental."); err != nil {
+		t.Fatalf("WriteArchitecture run2: %v", err)
+	}
+	units2, err := engine.SeedLedgerWithOptions(run2Dir, seedInput, true)
+	if err != nil {
+		t.Fatalf("SeedLedgerWithOptions run2: %v", err)
+	}
+	if units2[0].Status != "covered" || units2[0].PriorStatus != "prior_covered_same_source" {
+		t.Fatalf("expected SHA-256 unchanged unit to be carried over as covered/prior_covered_same_source, got status=%s prior_status=%s", units2[0].Status, units2[0].PriorStatus)
+	}
+	// Run 2 can immediately render without invoking a single hunter!
+	r2, err := engine.Render(engine.RenderRequest{OutputDir: run2Dir, FailOn: "any"})
+	if err != nil || !r2.GatePassed || r2.RunStatus != "complete" {
+		t.Fatalf("expected immediate complete render on carried-over clean run, got %+v err=%v", r2, err)
 	}
 }
 

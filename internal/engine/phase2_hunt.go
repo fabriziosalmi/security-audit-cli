@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/scanner"
 	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
 	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
@@ -130,6 +131,24 @@ func SubmitHunter(outputDir, agentID string, result HunterStructuredResult) (map
 	ledgerErrs := validator.ValidateCoverageLedgerBytes(rawLedger, meta.Target, outputDir, validBlocks)
 	if len(ledgerErrs) > 0 {
 		return nil, fmt.Errorf("updated coverage-ledger failed validation: %s", strings.Join(ledgerErrs, "; "))
+	}
+
+	var citedPaths []string
+	for _, ur := range result.Units {
+		idx := ledgerIdx[ur.CoverageID]
+		citedPaths = append(citedPaths, units[idx].StartingPaths...)
+		citedPaths = append(citedPaths, ur.ReviewedPaths...)
+	}
+	for _, f := range candidateByFP {
+		for _, t := range f.Trace {
+			citedPaths = append(citedPaths, t.File)
+		}
+		for _, ev := range f.Evidence {
+			citedPaths = append(citedPaths, ev.File)
+		}
+	}
+	if err := scanner.VerifyAndPinSourceFiles(meta.Target, state, citedPaths); err != nil {
+		return nil, err
 	}
 
 	for fp, f := range candidateByFP {

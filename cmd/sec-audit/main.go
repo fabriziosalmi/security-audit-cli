@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/engine"
 	"github.com/fabriziosalmi/security-audit-cli/internal/mcp"
 	"github.com/fabriziosalmi/security-audit-cli/internal/registry"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
+
+// Version is the canonical semantic version of sec-audit.
+var Version = "0.1.3"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -25,6 +30,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	sub := args[0]
 	if sub == "-h" || sub == "--help" || sub == "help" {
 		printUsage(stdout)
+		return 0
+	}
+	if sub == "-v" || sub == "--version" || sub == "version" {
+		vOut, _ := json.MarshalIndent(map[string]string{
+			"name":    "sec-audit",
+			"version": Version,
+			"os":      runtime.GOOS,
+			"arch":    runtime.GOARCH,
+		}, "", "  ")
+		fmt.Fprintln(stdout, string(vOut))
 		return 0
 	}
 	if sub == "mcp" {
@@ -60,6 +75,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if v, hasValid := m["valid"].(bool); hasValid && !v {
 			return 1
 		}
+		if gp, hasGate := m["gate_passed"].(bool); hasGate && !gp {
+			return 2
+		}
+	}
+	if rr, isRender := res.(*engine.RenderResponse); isRender && !rr.GatePassed {
+		return 2
 	}
 	return 0
 }
@@ -91,6 +112,8 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	reason := fs.String("reason", "", "Reason for replacement or incomplete run")
 	ledgerPath := fs.String("ledger", "", "Direct path to coverage-ledger.json")
 	findingsPath := fs.String("findings", "", "Direct path to findings.json")
+	carryoverUnchanged := fs.Bool("carryover-unchanged", false, "Carry over SHA-256 unchanged clean units from prior runs")
+	failOn := fs.String("fail-on", "", "CI exit gate threshold (critical, high, medium, low, needs_validation, any)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -131,7 +154,7 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 		*blockFlag != "" || *contentFlag != "" || *role != "" || *agentID != "" ||
 		*coverageIDs != "" || *fingerprint != "" || *filesList != "" || *maxFileBytes > 0 ||
 		*maxTotalBytes > 0 || *criticKind != "" || *decision != "" || *reason != "" ||
-		*ledgerPath != "" || *findingsPath != ""
+		*ledgerPath != "" || *findingsPath != "" || *carryoverUnchanged || *failOn != ""
 
 	if *jsonInput != "" {
 		var b []byte
@@ -240,6 +263,10 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 	if sub == "validate" && *target != "" {
 		payload["target_path"] = *target
 	}
+	if *carryoverUnchanged {
+		payload["carryover_unchanged"] = true
+	}
+	setIfNotEmpty("fail_on", *failOn)
 
 	b, err := json.Marshal(payload)
 	return json.RawMessage(b), err
@@ -250,9 +277,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "\nUsage:")
 	fmt.Fprintln(w, "  sec-audit <subcommand> [flags]")
 	fmt.Fprintln(w, "  sec-audit mcp")
+	fmt.Fprintln(w, "  sec-audit version")
 	fmt.Fprintln(w, "\nSubcommands (1:1 with MCP tools sec_audit_<subcommand>):")
 	for _, c := range registry.All() {
 		fmt.Fprintf(w, "  %-21s %s\n", c.Subcommand, c.Summary)
 	}
 	fmt.Fprintf(w, "  %-21s %s\n", "mcp", "Run JSON-RPC 2.0 MCP server over stdio")
+	fmt.Fprintf(w, "  %-21s %s\n", "version", "Print version and platform metadata")
 }

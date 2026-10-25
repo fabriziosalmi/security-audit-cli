@@ -9,8 +9,8 @@ import (
 
 func TestRegistryOneToOneParityAndDispatch(t *testing.T) {
 	all := All()
-	if len(all) != 12 {
-		t.Fatalf("expected 12 registered commands, got %d", len(all))
+	if len(all) != 13 {
+		t.Fatalf("expected 13 registered commands, got %d", len(all))
 	}
 	defs := ToolDefs()
 	if len(defs) != len(all) {
@@ -127,5 +127,31 @@ func TestRegistryOneToOneParityAndDispatch(t *testing.T) {
 	dupPayload := json.RawMessage(`{"file":"AI-AND-LLM.md","file":"ATTACK-CLASSES.md"}`)
 	if _, err := DispatchSubcommand("catalog", dupPayload); err == nil {
 		t.Fatalf("expected registry.Bind to reject duplicate JSON keys in outer request envelope")
+	}
+
+	// Verify 1:1:1 parity with VS Code extension manifest (editors/vscode/package.json)
+	vsPkgBytes, err := os.ReadFile(filepath.Join("..", "..", "editors", "vscode", "package.json"))
+	if err != nil {
+		t.Fatalf("read editors/vscode/package.json: %v", err)
+	}
+	var vsPkg struct {
+		Contributes struct {
+			Commands []struct {
+				Command string `json:"command"`
+			} `json:"commands"`
+		} `json:"contributes"`
+	}
+	if err := json.Unmarshal(vsPkgBytes, &vsPkg); err != nil {
+		t.Fatalf("unmarshal editors/vscode/package.json: %v", err)
+	}
+	vsCmdSet := make(map[string]bool)
+	for _, cmd := range vsPkg.Contributes.Commands {
+		vsCmdSet[cmd.Command] = true
+	}
+	for _, c := range all {
+		wantVS := "sec-audit." + c.Subcommand
+		if !vsCmdSet[wantVS] {
+			t.Fatalf("1:1:1 parity broken: CLI subcommand %q / MCP tool %q missing VS Code command %q in editors/vscode/package.json", c.Subcommand, c.ToolName, wantVS)
+		}
 	}
 }

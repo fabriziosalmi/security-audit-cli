@@ -88,6 +88,7 @@ type InternalState struct {
 	HardeningNotes     []string                      `json:"hardening_notes"`
 	UncoveredQueue     []UncoveredEntry              `json:"uncovered_queue"`
 	PriorCarryovers    []PriorCarryover              `json:"prior_carryovers"`
+	SourceHashes       map[string]string             `json:"source_hashes,omitempty"`
 }
 
 // RunStore provides crash-safe atomic persistence for all parent-owned files in an audit run directory.
@@ -219,6 +220,9 @@ func (s *RunStore) LoadState() (*InternalState, error) {
 	}
 	if st.Candidates == nil {
 		st.Candidates = make(map[string]*CandidateEnvelope)
+	}
+	if st.SourceHashes == nil {
+		st.SourceHashes = make(map[string]string)
 	}
 	return &st, nil
 }

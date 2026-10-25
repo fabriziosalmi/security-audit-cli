@@ -6,6 +6,23 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-25
+
+### Added
+
+- **Zero-Token Run Status and Next-Action Engine (`sec-audit status` / `sec_audit_status`)**:
+  Added a 13th 1:1 CLI subcommand and MCP tool that inspects `<output-dir>` and returns unit status counts, unvalidated candidates, unverified Phase 5 records, source-file SHA-256 drift, `ready_to_render`, and the exact `next_required_actions[]` needed to complete the audit run.
+- **Cryptographic Source-File SHA-256 Anti-Drift Pinning (`internal/scanner`, `internal/engine`, `internal/store`)**:
+  Pinned the SHA-256 digest of every reviewed and cited repository source file in `.sec-audit-state.json` (`source_hashes`) during `SeedLedgerWithOptions`, `SubmitHunter`, `SubmitVerifier`, and `SubmitRecordVerifier`, and enforced drift checks in `ValidateRun` and `Render` to fail closed if any reviewed source file mutates mid-audit.
+- **SHA-256 Verified Incremental Carryover (`--carryover-unchanged` in `ledger-seed`)**:
+  Added `CarryoverUnchanged` (`--carryover-unchanged`) to `SeedLedgerWithOptions` and `scanner.LoadPriorCleanUnits` to automatically promote prior clean units (`prior_covered_same_source` / `covered`) when every `starting_path` and `reviewed_path` has a cryptographically identical SHA-256 digest on disk.
+- **Coordinated Disclosure / GHSA Advisory Generator (`internal/report`, `internal/engine`)**:
+  Extended `Render` (`BuildAdvisoryMD`) to generate standalone `<output-dir>/advisories/GHSA-<fingerprint>.md` documents for every confirmed finding and include their SHA-256 digests in `manifest.sha256`.
+- **CLI Version Metadata and CI Exit Gate (`version`, `--version`, `--fail-on`)**:
+  Added `sec-audit version` / `--version` / `-v` (`0.1.3`) and `--fail-on <critical|high|medium|low|needs_validation|any>` on `validate` and `render` (exiting with code `2` when `gate_passed == false`).
+- **1:1:1 VS Code / Cursor / Antigravity Extension (`editors/vscode/`, `make vsix`)**:
+  Added a zero-dependency VS Code extension (`sec-audit-vscode`) with 4 native Activity Bar TreeViews (`Run Status & Next Actions`, `Findings & Source Trace`, `Coverage Ledger`, `Attack-Class Catalog`), inline `vscode.DiagnosticCollection` squiggles, `FileSystemWatcher`, 1:1:1 Command Palette parity with all 13 `sec-audit` commands, and a deterministic pure-Go `.vsix` packager (`editors/vscode/pack`).
+
 ## [0.1.2] - 2026-10-25
 
 ### Added

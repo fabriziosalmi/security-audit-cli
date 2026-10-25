@@ -191,3 +191,134 @@ func FileHashSHA256(path string) (string, error) {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
 }
+
+// VerifyAndPinSourceFiles computes the SHA-256 of each repository-relative path in relPaths,
+// fails if any previously pinned file in state.SourceHashes has drifted, and records new hashes.
+func VerifyAndPinSourceFiles(targetDir string, state *store.InternalState, relPaths []string) error {
+	if state.SourceHashes == nil {
+		state.SourceHashes = make(map[string]string)
+	}
+	for _, rel := range relPaths {
+		if rel == "" {
+			continue
+		}
+		if err := validator.VerifyRepoFileAndLine(targetDir, rel, 0); err != nil {
+			return err
+		}
+		absPath := filepath.Join(targetDir, filepath.FromSlash(rel))
+		info, err := os.Lstat(absPath)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		curHash, err := FileHashSHA256(absPath)
+		if err != nil {
+			return fmt.Errorf("hash source file %q: %w", rel, err)
+		}
+		if prevHash, exists := state.SourceHashes[rel]; exists && prevHash != curHash {
+			return fmt.Errorf("source drift detected on %q: sha256 changed from %s to %s during audit run", rel, prevHash, curHash)
+		}
+		state.SourceHashes[rel] = curHash
+	}
+	return nil
+}
+
+// DetectSourceDrift checks all files pinned in state.SourceHashes against current targetDir on disk
+// and returns a sorted list of human-readable drift error messages (and the list of drifted relative paths).
+func DetectSourceDrift(targetDir string, state *store.InternalState) ([]string, []string) {
+	if state == nil || len(state.SourceHashes) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(state.SourceHashes))
+	for k := range state.SourceHashes {
+		keys = append(keys, k)
+	}
+	// Sort deterministically
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[j] < keys[i] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	var errs []string
+	var drifted []string
+	for _, rel := range keys {
+		expected := state.SourceHashes[rel]
+		absPath := filepath.Join(targetDir, filepath.FromSlash(rel))
+		curHash, err := FileHashSHA256(absPath)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("source drift detected on %q: file unreadable (%v)", rel, err))
+			drifted = append(drifted, rel)
+			continue
+		}
+		if curHash != expected {
+			errs = append(errs, fmt.Sprintf("source drift detected on %q: expected sha256 %s, got %s", rel, expected, curHash))
+			drifted = append(drifted, rel)
+		}
+	}
+	return errs, drifted
+}
+
+// LoadPriorCleanUnits inspects prior run directories and returns a map of coverage_id -> CoverageUnit
+// for units that were cleanly covered (no findings, no unresolved blockers) and whose starting_paths
+// and reviewed_paths are cryptographically identical (SHA-256) in targetDir today.
+func LoadPriorCleanUnits(targetDir string, priorDirs []string) map[string]validator.CoverageUnit {
+	clean := make(map[string]validator.CoverageUnit)
+	for _, pdir := range priorDirs {
+		var units []validator.CoverageUnit
+		if err := store.ReadJSON(filepath.Join(pdir, "coverage-ledger.json"), &units); err != nil {
+			continue
+		}
+		var pState store.InternalState
+		_ = store.ReadJSON(filepath.Join(pdir, store.StateFilename), &pState)
+		var pMeta store.RunMetadata
+		_ = store.ReadJSON(filepath.Join(pdir, "run-metadata.json"), &pMeta)
+
+		for _, u := range units {
+			if u.Status != "covered" || len(u.ResultFingerprints) > 0 || len(u.Unresolved) > 0 {
+				continue
+			}
+			if u.AgentID == nil || *u.AgentID == "" || len(u.LocalChecks) == 0 || len(u.ReviewedPaths) == 0 {
+				continue
+			}
+			allPaths := make([]string, 0, len(u.StartingPaths)+len(u.ReviewedPaths))
+			allPaths = append(allPaths, u.StartingPaths...)
+			allPaths = append(allPaths, u.ReviewedPaths...)
+			allUnchanged := true
+			for _, rel := range allPaths {
+				if validator.VerifyRepoFileAndLine(targetDir, rel, 1) != nil {
+					allUnchanged = false
+					break
+				}
+				curHash, err := FileHashSHA256(filepath.Join(targetDir, filepath.FromSlash(rel)))
+				if err != nil {
+					allUnchanged = false
+					break
+				}
+				verified := false
+				if pState.SourceHashes != nil {
+					if oldHash, ok := pState.SourceHashes[rel]; ok && oldHash == curHash {
+						verified = true
+					}
+				}
+				if !verified && pMeta.SourceRef != "" && pMeta.SourceRef != "unversioned" && !pMeta.DirtyWorktree {
+					cmd := exec.Command("git", "-C", targetDir, "show", pMeta.SourceRef+":"+rel)
+					if out, gerr := cmd.Output(); gerr == nil {
+						sum := sha256.Sum256(out)
+						if hex.EncodeToString(sum[:]) == curHash {
+							verified = true
+						}
+					}
+				}
+				if !verified {
+					allUnchanged = false
+					break
+				}
+			}
+			if allUnchanged {
+				clean[u.CoverageID] = u
+			}
+		}
+	}
+	return clean
+}

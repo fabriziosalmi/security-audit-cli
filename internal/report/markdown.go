@@ -253,6 +253,77 @@ func BuildNeedsValidationMD(needsVal []validator.Finding) string {
 	return b.String()
 }
 
+// BuildAdvisoryMD generates a standalone Coordinated Disclosure / GitHub Security Advisory (GHSA)
+// Markdown document for a single confirmed finding.
+func BuildAdvisoryMD(meta *store.RunMetadata, f validator.Finding) string {
+	var b strings.Builder
+	sev := "UNKNOWN"
+	if f.Severity != nil && f.Severity.OverallSeverity != "" {
+		sev = strings.ToUpper(f.Severity.OverallSeverity)
+	}
+	fmt.Fprintf(&b, "# Security Advisory: %s (`%s`)\n\n", f.Title, f.Fingerprint)
+
+	b.WriteString("## Summary\n\n")
+	if meta != nil {
+		fmt.Fprintf(&b, "- **Repository**: `%s`\n", meta.Repo)
+		fmt.Fprintf(&b, "- **Source Ref**: `%s` (dirty worktree: `%v`)\n", meta.SourceRef, meta.DirtyWorktree)
+	}
+	fmt.Fprintf(&b, "- **Severity**: `%s`\n", sev)
+	if f.Confidence != nil && f.Confidence.Score != "" {
+		fmt.Fprintf(&b, "- **Confidence**: `%s` (%s)\n", f.Confidence.Score, f.Confidence.Reason)
+	}
+	fmt.Fprintf(&b, "- **Root Cause**: %s\n", f.RootCause)
+	fmt.Fprintf(&b, "- **Intended Behavior**: %s\n\n", f.IntendedBehavior)
+	fmt.Fprintf(&b, "%s\n\n", f.Description)
+
+	b.WriteString("## Affected Component and Source Trace\n\n")
+	for idx, t := range f.Trace {
+		fmt.Fprintf(&b, "%d. **[%s]** `%s:%d` (`%s`): %s\n", idx+1, t.Kind, t.File, t.Line, t.Scope, t.Description)
+	}
+
+	b.WriteString("\n## Supporting Evidence\n\n")
+	for _, ev := range f.Evidence {
+		fmt.Fprintf(&b, "- `%s:%d`: %s\n", ev.File, ev.Line, ev.Description)
+	}
+	if len(f.Conditions) > 0 {
+		b.WriteString("\n## Preconditions\n\n")
+		for _, c := range f.Conditions {
+			fmt.Fprintf(&b, "- `%s`: %s\n", c.Kind, c.Description)
+		}
+	}
+
+	if f.Execution != nil {
+		b.WriteString("\n## Proof of Concept and Bounded Reproduction\n\n")
+		fmt.Fprintf(&b, "- **Attacker Perspective**: %s\n", f.Execution.AttackerPerspective)
+		b.WriteString("- **Payloads / Inputs**:\n")
+		for _, p := range f.Execution.Payloads {
+			fmt.Fprintf(&b, "  - `%s`\n", p)
+		}
+		b.WriteString("- **Reproduction Steps**:\n")
+		for idx, inst := range f.Execution.Instructions {
+			fmt.Fprintf(&b, "  %d. %s\n", idx+1, inst)
+		}
+		fmt.Fprintf(&b, "- **Observed Result**: %s\n", f.Execution.ObservedResult)
+	}
+
+	if f.Severity != nil {
+		b.WriteString("\n## Impact and Severity\n\n")
+		fmt.Fprintf(&b, "- **Likelihood**: `%s` (%s)\n", f.Severity.Likelihood.Score, f.Severity.Likelihood.Reason)
+		fmt.Fprintf(&b, "- **Impact**: `%s` (%s)\n", f.Severity.Impact.Score, f.Severity.Impact.Reason)
+		fmt.Fprintf(&b, "- **Overall Severity**: `%s`\n", f.Severity.OverallSeverity)
+	}
+
+	if f.Remediation != nil {
+		b.WriteString("\n## Recommended Remediation\n\n")
+		fmt.Fprintf(&b, "%s\n\n", f.Remediation.Strategy)
+		for _, cc := range f.Remediation.CodeChanges {
+			fmt.Fprintf(&b, "**File**: `%s`\n```\n%s\n```\n\n", cc.FileName, cc.FixedCode)
+		}
+	}
+
+	return b.String()
+}
+
 func escapeTable(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "|", "\\|")

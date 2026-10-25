@@ -224,8 +224,17 @@ func WriteArchitecture(outputDir, content string) (map[string]any, error) {
 // SeedLedger deterministically derives coverage_ids, verifies starting_paths on disk and block refs against the catalog,
 // sorts units lexicographically, validates the ledger, and writes <output-dir>/coverage-ledger.json.
 func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageUnit, error) {
+	return SeedLedgerWithOptions(outputDir, inputs, false)
+}
+
+// SeedLedgerWithOptions extends SeedLedger with optional SHA-256 verified carryover of clean units from prior runs.
+func SeedLedgerWithOptions(outputDir string, inputs []SeedUnitInput, carryoverUnchanged bool) ([]validator.CoverageUnit, error) {
 	rs := store.New(outputDir)
 	meta, err := rs.LoadMetadata()
+	if err != nil {
+		return nil, err
+	}
+	state, err := rs.LoadState()
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +246,11 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 	selectedFileSet := make(map[string]bool, len(meta.SelectedCompanionFiles))
 	for _, f := range meta.SelectedCompanionFiles {
 		selectedFileSet[f] = true
+	}
+
+	var priorClean map[string]validator.CoverageUnit
+	if len(meta.PriorRunPaths) > 0 {
+		priorClean = scanner.LoadPriorCleanUnits(meta.Target, meta.PriorRunPaths)
 	}
 
 	units := make([]validator.CoverageUnit, 0, len(inputs))
@@ -282,10 +296,35 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 		}
 
 		status := "planned"
+		var agentID *string
+		reviewedPaths := []string{}
+		localChecks := []validator.LocalCheck{}
 		var unresolved []string
 		if len(meta.ScopePaths) > 0 && !scanner.AnyPathInScope(in.StartingPaths, meta.ScopePaths) {
 			status = "out_of_scope"
 			unresolved = []string{"outside_requested_scope_paths"}
+		} else if (carryoverUnchanged || in.PriorStatus == "prior_covered_same_source") && priorClean != nil {
+			if pu, ok := priorClean[cid]; ok {
+				priorStatus = "prior_covered_same_source"
+				status = "covered"
+				aid := *pu.AgentID
+				agentID = &aid
+				reviewedPaths = append(reviewedPaths, pu.ReviewedPaths...)
+				for _, lc := range pu.LocalChecks {
+					if lc.Method == "local" {
+						lc.Method = "source"
+						lc.Artifact = nil
+					}
+					localChecks = append(localChecks, lc)
+				}
+				unresolved = []string{}
+				pinPaths := append(append([]string{}, in.StartingPaths...), pu.ReviewedPaths...)
+				if err := scanner.VerifyAndPinSourceFiles(meta.Target, state, pinPaths); err != nil {
+					return nil, err
+				}
+			} else {
+				unresolved = []string{}
+			}
 		} else {
 			unresolved = []string{}
 		}
@@ -311,9 +350,9 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 			Attempts:                 []validator.ArchivedAttempt{},
 			Wave:                     1,
 			Status:                   status,
-			AgentID:                  nil,
-			ReviewedPaths:            []string{},
-			LocalChecks:              []validator.LocalCheck{},
+			AgentID:                  agentID,
+			ReviewedPaths:            reviewedPaths,
+			LocalChecks:              localChecks,
 			ResultFingerprints:       []string{},
 			Unresolved:               unresolved,
 		})
@@ -333,6 +372,9 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 	}
 
 	if err := rs.SaveLedger(units); err != nil {
+		return nil, err
+	}
+	if err := rs.SaveState(state); err != nil {
 		return nil, err
 	}
 	return units, nil

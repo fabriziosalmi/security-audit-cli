@@ -66,8 +66,9 @@ type SeedUnitInput struct {
 
 // SeedLedgerRequest is the input for sec-audit ledger-seed / sec_audit_ledger_seed.
 type SeedLedgerRequest struct {
-	OutputDir string          `json:"output_dir"`
-	Units     []SeedUnitInput `json:"units"`
+	OutputDir          string          `json:"output_dir"`
+	Units              []SeedUnitInput `json:"units"`
+	CarryoverUnchanged bool            `json:"carryover_unchanged,omitempty"`
 }
 
 // AssignAgentRequest is the input for sec-audit agent-assign / sec_audit_agent_assign.
@@ -180,12 +181,14 @@ type ValidateRequest struct {
 	LedgerPath   string `json:"ledger_path,omitempty"`
 	FindingsPath string `json:"findings_path,omitempty"`
 	TargetPath   string `json:"target_path,omitempty"`
+	FailOn       string `json:"fail_on,omitempty"`
 }
 
 // RenderRequest is the input for sec-audit render / sec_audit_render.
 type RenderRequest struct {
 	OutputDir        string `json:"output_dir"`
 	IncompleteReason string `json:"incomplete_reason,omitempty"`
+	FailOn           string `json:"fail_on,omitempty"`
 }
 
 // RenderResponse lists the generated Phase 6 artifact paths, cryptographic SHA-256 manifest, and terminal run status.
@@ -196,6 +199,7 @@ type RenderResponse struct {
 	FindingsDetailPath  string            `json:"findings_detail_path"`
 	NeedsValidationPath string            `json:"needs_validation_path"`
 	SarifPath           string            `json:"sarif_path"`
+	AdvisoryPaths       []string          `json:"advisory_paths"`
 	ManifestPath        string            `json:"manifest_path"`
 	ArtifactHashes      map[string]string `json:"artifact_hashes"`
 	ConfirmedCount      int               `json:"confirmed_count"`
@@ -203,4 +207,32 @@ type RenderResponse struct {
 	RejectedCount       int               `json:"rejected_count"`
 	HardeningCount      int               `json:"hardening_count"`
 	UnvalidatedFPs      []string          `json:"unvalidated_fingerprints"`
+	GatePassed          bool              `json:"gate_passed"`
+	GateFailureReason   string            `json:"gate_failure_reason,omitempty"`
+}
+
+// StatusRequest is the input for sec-audit status / sec_audit_status.
+type StatusRequest struct {
+	OutputDir string `json:"output_dir"`
+}
+
+// StatusResponse provides a zero-token deterministic summary of an audit run and its exact next required actions.
+type StatusResponse struct {
+	RunID                 string         `json:"run_id"`
+	Repo                  string         `json:"repo"`
+	Profile               string         `json:"profile"`
+	RunStatus             string         `json:"run_status"`
+	CurrentWave           int            `json:"current_wave"`
+	ArchitectureWritten   bool           `json:"architecture_written"`
+	AgentsSpent           int            `json:"agents_spent"`
+	Budget                *int           `json:"budget,omitempty"`
+	UnitStatusCounts      map[string]int `json:"unit_status_counts"`
+	PlannedUnitIDs        []string       `json:"planned_unit_ids"`
+	InProgressUnitIDs     []string       `json:"in_progress_unit_ids"`
+	UncoveredQueueCount   int            `json:"uncovered_queue_count"`
+	UnvalidatedCandidates []string       `json:"unvalidated_candidate_fingerprints"`
+	UnverifiedPhase5FPs   []string       `json:"unverified_phase5_fingerprints"`
+	SourceDriftFiles      []string       `json:"source_drift_files"`
+	ReadyToRender         bool           `json:"ready_to_render"`
+	NextRequiredActions   []string       `json:"next_required_actions"`
 }

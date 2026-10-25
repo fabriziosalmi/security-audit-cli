@@ -98,17 +98,18 @@ var commands = []Command{
 		"ledger-seed",
 		"Derive canonical RFC 3986 coverage_ids, verify paths/blocks, seed ledger",
 		"Phase 1 coverage plan: derive canonical RFC 3986 coverage_ids, verify starting_paths "+
-			"on disk and block references against catalog, sort, validate, and write coverage-ledger.json.",
+			"on disk and block references against catalog, optionally carry over SHA-256 unchanged clean units, sort, validate, and write coverage-ledger.json.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"output_dir": map[string]any{"type": "string"},
-				"units":      map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+				"output_dir":          map[string]any{"type": "string"},
+				"units":               map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+				"carryover_unchanged": map[string]any{"type": "boolean", "description": "Automatically promote units whose starting_paths and reviewed_paths are SHA-256 unchanged from prior_run_dirs"},
 			},
 			"required": []string{"output_dir", "units"},
 		},
 		Bind(func(req engine.SeedLedgerRequest) ([]validator.CoverageUnit, error) {
-			return engine.SeedLedger(req.OutputDir, req.Units)
+			return engine.SeedLedgerWithOptions(req.OutputDir, req.Units, req.CarryoverUnchanged)
 		}),
 	),
 	newCommand(
@@ -227,9 +228,9 @@ var commands = []Command{
 	),
 	newCommand(
 		"validate",
-		"Validate coverage-ledger.json, findings.json, and source paths on disk",
+		"Validate coverage-ledger.json, findings.json, source paths/hashes on disk, and optional CI gate",
 		"Run deterministic validators on coverage-ledger.json and findings.json, plus "+
-			"source-file and line-number existence verification against the target repository.",
+			"source-file, line-number, and SHA-256 drift verification against the target repository.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -237,11 +238,12 @@ var commands = []Command{
 				"ledger_path":   map[string]any{"type": "string"},
 				"findings_path": map[string]any{"type": "string"},
 				"target_path":   map[string]any{"type": "string"},
+				"fail_on":       map[string]any{"type": "string", "enum": []string{"critical", "high", "medium", "low", "needs_validation", "any"}},
 			},
 		},
 		Bind(func(req engine.ValidateRequest) (map[string]any, error) {
 			if req.OutputDir != "" {
-				return engine.ValidateRun(req.OutputDir)
+				return engine.ValidateRunWithGate(req.OutputDir, req.FailOn)
 			}
 			var ledgerErrs, findingErrs []string
 			if req.LedgerPath != "" {
@@ -251,34 +253,62 @@ var commands = []Command{
 				}
 				ledgerErrs = errs
 			}
+			var findings []validator.Finding
 			if req.FindingsPath != "" {
 				errs, err := validator.ValidateFindingsFile(req.FindingsPath, req.TargetPath)
 				if err != nil {
 					return nil, err
 				}
 				findingErrs = errs
+				if raw, rerr := validator.ReadFileNoFollow(req.FindingsPath); rerr == nil {
+					_ = json.Unmarshal(raw, &findings)
+				}
 			}
-			return map[string]any{
+			gatePassed, gateReason, gerr := engine.EvaluateFailOnGate(req.FailOn, findings)
+			if gerr != nil {
+				return nil, gerr
+			}
+			res := map[string]any{
 				"valid":          len(ledgerErrs) == 0 && len(findingErrs) == 0,
+				"gate_passed":    gatePassed,
 				"ledger_errors":  ledgerErrs,
 				"finding_errors": findingErrs,
-			}, nil
+			}
+			if gateReason != "" {
+				res["gate_failure_reason"] = gateReason
+			}
+			return res, nil
 		}),
 	),
 	newCommand(
 		"render",
-		"Deterministically generate REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, findings.sarif",
+		"Deterministically generate REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, advisories/GHSA-*.md, findings.sarif",
 		"Phase 6 deterministic reporting: enforce terminal verification gate and generate "+
-			"REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, and findings.sarif.",
+			"REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, standalone GHSA advisories, and findings.sarif.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"output_dir":        map[string]any{"type": "string"},
 				"incomplete_reason": map[string]any{"type": "string"},
+				"fail_on":           map[string]any{"type": "string", "enum": []string{"critical", "high", "medium", "low", "needs_validation", "any"}},
 			},
 			"required": []string{"output_dir"},
 		},
 		Bind(engine.Render),
+	),
+	newCommand(
+		"status",
+		"Return zero-token run progress summary, source drift check, and exact next required actions",
+		"Inspect an audit run directory and return a compact deterministic summary of unit counts, "+
+			"unvalidated candidates, unverified Phase 5 records, source file SHA-256 drift, and the exact next required actions.",
+		map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"output_dir": map[string]any{"type": "string"},
+			},
+			"required": []string{"output_dir"},
+		},
+		Bind(engine.Status),
 	),
 }
 

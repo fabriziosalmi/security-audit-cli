@@ -190,4 +190,30 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	if err != nil || !strings.Contains(string(rawProse), `"record":{`) {
 		t.Fatalf("expected record with 'output_dir' in description to still wrap under 'record', got err=%v raw=%s", err, string(rawProse))
 	}
+
+	// 11. version / --version / -v -> exit 0
+	for _, vArg := range []string{"version", "--version", "-v"} {
+		stdout.Reset()
+		code = run([]string{vArg}, strings.NewReader(""), &stdout, &stderr)
+		if code != 0 || !strings.Contains(stdout.String(), `"version":`) {
+			t.Fatalf("expected %s to exit 0 with version JSON, got code=%d out=%s", vArg, code, stdout.String())
+		}
+	}
+
+	// 12. status --output-dir -> exit 0
+	stdout.Reset()
+	code = run([]string{"status", "--output-dir", outDir}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), `"next_required_actions"`) {
+		t.Fatalf("expected status CLI to succeed, got code=%d out=%s err=%s", code, stdout.String(), stderr.String())
+	}
+
+	// 13. --carryover-unchanged and --fail-on flag parsing
+	rawCarry, err := parseSubcommandFlags("ledger-seed", []string{"--output-dir", outDir, "--carryover-unchanged", "--input", unitsFile}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(rawCarry), `"carryover_unchanged":true`) {
+		t.Fatalf("expected --carryover-unchanged to set carryover_unchanged=true, got err=%v raw=%s", err, string(rawCarry))
+	}
+	rawFailOn, err := parseSubcommandFlags("render", []string{"--output-dir", outDir, "--fail-on", "high"}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(rawFailOn), `"fail_on":"high"`) {
+		t.Fatalf("expected --fail-on high to set fail_on=high, got err=%v raw=%s", err, string(rawFailOn))
+	}
 }

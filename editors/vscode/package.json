@@ -1,0 +1,183 @@
+{
+  "name": "sec-audit-vscode",
+  "displayName": "Sec-Audit (Deterministic 6-Phase Security Audit)",
+  "description": "1:1:1 IDE cockpit for sec-audit CLI and MCP server: live run status, source-trace navigation, coverage ledger, and GHSA advisories.",
+  "version": "0.1.3",
+  "publisher": "fabriziosalmi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fabriziosalmi/security-audit-cli.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:secAuditStatusView",
+    "onView:secAuditFindingsView",
+    "onView:secAuditLedgerView",
+    "onView:secAuditCatalogView",
+    "onCommand:sec-audit.init",
+    "onCommand:sec-audit.status"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Sec-Audit",
+      "properties": {
+        "secAudit.binaryPath": {
+          "type": "string",
+          "default": "sec-audit",
+          "description": "Path to the sec-audit binary (defaults to 'sec-audit' on PATH or ~/.local/bin/sec-audit)."
+        },
+        "secAudit.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "Active sec-audit run output directory (<output-dir>)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sec-audit-sidebar",
+          "title": "Sec-Audit",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sec-audit-sidebar": [
+        {
+          "id": "secAuditStatusView",
+          "name": "Run Status & Next Actions"
+        },
+        {
+          "id": "secAuditFindingsView",
+          "name": "Findings & Source Trace"
+        },
+        {
+          "id": "secAuditLedgerView",
+          "name": "Coverage Ledger"
+        },
+        {
+          "id": "secAuditCatalogView",
+          "name": "Attack-Class Catalog"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sec-audit.init",
+        "title": "Sec-Audit: Init Audit Run (Phase 1a)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "sec-audit.catalog",
+        "title": "Sec-Audit: Inspect Attack-Class Catalog (Phase 1-2)",
+        "icon": "$(book)"
+      },
+      {
+        "command": "sec-audit.architecture",
+        "title": "Sec-Audit: Write Architecture Summary (Phase 1b)",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "sec-audit.ledger-seed",
+        "title": "Sec-Audit: Seed Coverage Ledger (Phase 1c)",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "sec-audit.agent-assign",
+        "title": "Sec-Audit: Assign Agent & Copy Prompt (Phases 1-5)",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "sec-audit.artifact-promote",
+        "title": "Sec-Audit: Promote Agent Scratch Artifacts (Phases 2-5)",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "sec-audit.hunter-submit",
+        "title": "Sec-Audit: Submit Hunter Result (Phase 2)",
+        "icon": "$(search)"
+      },
+      {
+        "command": "sec-audit.critic-submit",
+        "title": "Sec-Audit: Submit Coverage Critic Result (Phase 2)",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "sec-audit.verifier-submit",
+        "title": "Sec-Audit: Submit Phase 3 Verifier Decision (Phase 3)",
+        "icon": "$(check)"
+      },
+      {
+        "command": "sec-audit.record-verify-submit",
+        "title": "Sec-Audit: Submit Phase 5 Record Verifier Decision (Phase 5)",
+        "icon": "$(verified)"
+      },
+      {
+        "command": "sec-audit.validate",
+        "title": "Sec-Audit: Validate Run & Source Drift (Phase 5-6)",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "sec-audit.render",
+        "title": "Sec-Audit: Render Reports & GHSA Advisories (Phase 6)",
+        "icon": "$(output)"
+      },
+      {
+        "command": "sec-audit.status",
+        "title": "Sec-Audit: Refresh Run Status & Next Actions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sec-audit.selectOutputDir",
+        "title": "Sec-Audit: Select Active Run Directory (<output-dir>)",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "sec-audit.openReport",
+        "title": "Sec-Audit: Open REPORT.md",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "sec-audit.openLocation",
+        "title": "Sec-Audit: Jump to Source File & Line"
+      },
+      {
+        "command": "sec-audit.openCatalogBlock",
+        "title": "Sec-Audit: Open Playbook Block"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sec-audit.selectOutputDir",
+          "when": "view == secAuditStatusView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sec-audit.status",
+          "when": "view == secAuditStatusView || view == secAuditFindingsView || view == secAuditLedgerView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sec-audit.validate",
+          "when": "view == secAuditStatusView",
+          "group": "navigation@3"
+        },
+        {
+          "command": "sec-audit.render",
+          "when": "view == secAuditStatusView",
+          "group": "navigation@4"
+        }
+      ]
+    }
+  }
+}
