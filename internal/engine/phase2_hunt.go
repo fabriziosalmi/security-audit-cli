@@ -26,6 +26,9 @@ func SubmitHunter(outputDir, agentID string, result HunterStructuredResult) (map
 	if !ok || assign.Role != "hunter" {
 		return nil, fmt.Errorf("agent_id %q is not a registered hunter", agentID)
 	}
+	if assign.Completed {
+		return nil, fmt.Errorf("hunter %q has already submitted its result", agentID)
+	}
 	units, err := rs.LoadLedger()
 	if err != nil {
 		return nil, err
@@ -93,6 +96,20 @@ func SubmitHunter(outputDir, agentID string, result HunterStructuredResult) (map
 
 		idx := ledgerIdx[ur.CoverageID]
 		u := &units[idx]
+		revSet := make(map[string]bool, len(ur.ReviewedPaths))
+		for _, rp := range ur.ReviewedPaths {
+			revSet[rp] = true
+		}
+		for _, sp := range u.StartingPaths {
+			if !revSet[sp] {
+				return nil, fmt.Errorf("unit %q reviewed_paths must include starting_path %q", ur.CoverageID, sp)
+			}
+		}
+		for cIdx, c := range ur.Checks {
+			if c.AgentID != agentID {
+				return nil, fmt.Errorf("unit %q checks[%d].agent_id %q must match submitting hunter %q", ur.CoverageID, cIdx, c.AgentID, agentID)
+			}
+		}
 		u.Status = ur.Disposition
 		u.ReviewedPaths = nonNilSlice(ur.ReviewedPaths)
 		u.LocalChecks = ur.Checks

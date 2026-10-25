@@ -2,8 +2,6 @@ package validator
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 func validateStringArray(arr []string, location string, errs *[]string, allowEmpty, fingerprint, pathValue bool, targetDir string) {
@@ -86,10 +84,8 @@ func validateChecks(checks []LocalCheck, location string, errs *[]string, target
 				}
 				addErr(fmt.Sprintf("%s.artifact: local check requires an artifact owned by agent %q", base, owner))
 			} else if outputDir != "" {
-				artDiskPath := filepath.Join(outputDir, filepath.FromSlash(*c.Artifact))
-				st, err := os.Lstat(artDiskPath)
-				if err != nil || !st.Mode().IsRegular() {
-					addErr(fmt.Sprintf("%s.artifact: promoted regular file %q does not exist in output directory", base, *c.Artifact))
+				if err := VerifyOutputRegularFile(outputDir, *c.Artifact); err != nil {
+					addErr(fmt.Sprintf("%s.artifact: %v", base, err))
 				}
 			}
 		}

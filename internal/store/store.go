@@ -151,18 +151,26 @@ func (s *RunStore) FindingsPath() string     { return filepath.Join(s.OutputDir,
 func (s *RunStore) StatePath() string        { return filepath.Join(s.OutputDir, StateFilename) }
 func (s *RunStore) ArchitecturePath() string { return filepath.Join(s.OutputDir, "architecture.md") }
 
+// ReadJSON reads a regular file without following symlinks, runs single-pass JSON preflight, and unmarshals into dst.
+func ReadJSON(path string, dst any) error {
+	b, err := validator.ReadFileNoFollow(path)
+	if err != nil {
+		return err
+	}
+	if err := validator.ValidateJSONPreflight(b); err != nil {
+		return err
+	}
+	return json.Unmarshal(b, dst)
+}
+
 func (s *RunStore) SaveMetadata(meta *RunMetadata) error {
 	return WriteJSONAtomic(s.MetadataPath(), meta)
 }
 
 func (s *RunStore) LoadMetadata() (*RunMetadata, error) {
-	b, err := os.ReadFile(s.MetadataPath())
-	if err != nil {
-		return nil, fmt.Errorf("read run-metadata.json: %w", err)
-	}
 	var m RunMetadata
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("parse run-metadata.json: %w", err)
+	if err := ReadJSON(s.MetadataPath(), &m); err != nil {
+		return nil, fmt.Errorf("read run-metadata.json: %w", err)
 	}
 	return &m, nil
 }
@@ -172,13 +180,9 @@ func (s *RunStore) SaveLedger(units []validator.CoverageUnit) error {
 }
 
 func (s *RunStore) LoadLedger() ([]validator.CoverageUnit, error) {
-	b, err := os.ReadFile(s.LedgerPath())
-	if err != nil {
-		return nil, fmt.Errorf("read coverage-ledger.json: %w", err)
-	}
 	var units []validator.CoverageUnit
-	if err := json.Unmarshal(b, &units); err != nil {
-		return nil, fmt.Errorf("parse coverage-ledger.json: %w", err)
+	if err := ReadJSON(s.LedgerPath(), &units); err != nil {
+		return nil, fmt.Errorf("read coverage-ledger.json: %w", err)
 	}
 	return units, nil
 }
@@ -191,16 +195,12 @@ func (s *RunStore) SaveFindings(findings []validator.Finding) error {
 }
 
 func (s *RunStore) LoadFindings() ([]validator.Finding, error) {
-	b, err := os.ReadFile(s.FindingsPath())
-	if os.IsNotExist(err) {
+	if _, err := os.Lstat(s.FindingsPath()); os.IsNotExist(err) {
 		return []validator.Finding{}, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("read findings.json: %w", err)
-	}
 	var findings []validator.Finding
-	if err := json.Unmarshal(b, &findings); err != nil {
-		return nil, fmt.Errorf("parse findings.json: %w", err)
+	if err := ReadJSON(s.FindingsPath(), &findings); err != nil {
+		return nil, fmt.Errorf("read findings.json: %w", err)
 	}
 	return findings, nil
 }
@@ -210,13 +210,9 @@ func (s *RunStore) SaveState(st *InternalState) error {
 }
 
 func (s *RunStore) LoadState() (*InternalState, error) {
-	b, err := os.ReadFile(s.StatePath())
-	if err != nil {
-		return nil, fmt.Errorf("read internal state: %w", err)
-	}
 	var st InternalState
-	if err := json.Unmarshal(b, &st); err != nil {
-		return nil, fmt.Errorf("parse internal state: %w", err)
+	if err := ReadJSON(s.StatePath(), &st); err != nil {
+		return nil, fmt.Errorf("read internal state: %w", err)
 	}
 	if st.Agents == nil {
 		st.Agents = make(map[string]*AgentAssignment)
@@ -245,7 +241,7 @@ func (s *RunStore) SaveArchitecture(content string) (string, int, error) {
 }
 
 func (s *RunStore) LoadArchitecture() ([]byte, error) {
-	b, err := os.ReadFile(s.ArchitecturePath())
+	b, err := validator.ReadFileNoFollow(s.ArchitecturePath())
 	if err != nil {
 		return nil, fmt.Errorf("architecture.md must be written before assigning agents: %w", err)
 	}
@@ -263,7 +259,7 @@ func (s *RunStore) SyncFindings(targetDir string, state *InternalState) error {
 	if err := s.SaveFindings(findings); err != nil {
 		return err
 	}
-	rawBytes, err := os.ReadFile(s.FindingsPath())
+	rawBytes, err := validator.ReadFileNoFollow(s.FindingsPath())
 	if err != nil {
 		return err
 	}

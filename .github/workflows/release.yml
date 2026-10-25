@@ -1,0 +1,153 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]*'
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('0.0.0-dryrun.{0}', github.run_number) }}
+
+jobs:
+  build:
+    name: build (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            os: ubuntu-latest
+          - goos: linux
+            goarch: arm64
+            os: ubuntu-latest
+          - goos: darwin
+            goarch: amd64
+            os: macos-latest
+          - goos: darwin
+            goarch: arm64
+            os: macos-latest
+          - goos: windows
+            goarch: amd64
+            os: ubuntu-latest
+            ext: .exe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.25.x'
+      - name: Run vet and race test gate
+        if: matrix.goos != 'windows' && !(matrix.goos == 'linux' && matrix.goarch == 'arm64')
+        run: go vet ./... && go test -count=1 -race -timeout 120s ./...
+      - name: Build deterministic binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          bin="dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -trimpath -ldflags="-s -w" -o "$bin" ./cmd/sec-audit
+      - name: Ad-hoc codesign (darwin)
+        if: matrix.goos == 'darwin'
+        run: |
+          bin="dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}"
+          codesign --sign - --force --timestamp=none "$bin"
+          codesign -d -v "$bin"
+      - name: Package archive
+        run: |
+          cd dist
+          bin="sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -q "sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "$bin"
+          else
+            tar -czf "sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "$bin"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+          if-no-files-found: ignore
+
+  release:
+    name: SBOM, Cosign Keyless, SLSA Provenance & Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+      - name: Flatten release archives and compute SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
+          (cd release && sha256sum sec-audit-* > SHA256SUMS.txt)
+          cat release/SHA256SUMS.txt
+      - name: Generate SPDX and CycloneDX SBOMs
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          format: spdx-json
+          output-file: release/sec-audit.sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          format: cyclonedx-json
+          output-file: release/sec-audit.sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Install Sigstore Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Sign and verify SHA256SUMS.txt and SBOMs with Cosign keyless OIDC
+        run: |
+          set -euo pipefail
+          cd release
+          for target in SHA256SUMS.txt sec-audit.sbom.spdx.json sec-audit.sbom.cdx.json; do
+            cosign sign-blob --yes \
+              --bundle "${target}.bundle" \
+              "$target"
+            cosign verify-blob \
+              --certificate-identity-regexp '^https://github.com/fabriziosalmi/security-audit-cli/' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --bundle "${target}.bundle" \
+              "$target"
+          done
+      - name: Attest SLSA Build Provenance for release archives
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: "release/sec-audit-*"
+      - name: Attest SBOM Provenance
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: "release/sec-audit-*.tar.gz"
+          sbom-path: "release/sec-audit.sbom.spdx.json"
+      - name: Publish GitHub Release with signed artifacts and SBOMs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" release/* --title "$TAG" --generate-notes || \
+            gh release upload "$TAG" release/* --clobber

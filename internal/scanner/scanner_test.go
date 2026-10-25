@@ -65,6 +65,21 @@ func TestScanRepositoryAndPriorCarryover(t *testing.T) {
 	if IsSubpath(repo, filepath.Dir(repo)) {
 		t.Fatalf("expected IsSubpath false for parent")
 	}
+	// Break-test: Symlink alias pointing inside repo must still be detected by IsSubpath
+	symAliasDir := t.TempDir()
+	symTarget := filepath.Join(symAliasDir, "repo-link")
+	_ = os.Symlink(repo, symTarget)
+	if !IsSubpath(repo, filepath.Join(symTarget, "nonexistent-audit-out")) {
+		t.Fatalf("expected IsSubpath to detect child path traversing symlink into parent repo")
+	}
+
+	// Break-test: EvaluatePriorRuns must ignore symlinked or duplicate-key findings.json
+	evilPriorDir := t.TempDir()
+	_ = os.Symlink(filepath.Join(repo, "go.mod"), filepath.Join(evilPriorDir, "findings.json"))
+	evilCos, evilCarried := EvaluatePriorRuns(repo, []string{evilPriorDir})
+	if len(evilCos) != 0 || len(evilCarried) != 0 {
+		t.Fatalf("expected symlinked findings.json in prior_run_dirs to be rejected")
+	}
 	r1 := NextRunDir(repo)
 	if filepath.Base(r1) != "run-1" {
 		t.Fatalf("expected run-1, got %s", r1)

@@ -105,21 +105,22 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 				return err
 			}
 			payload["units"] = arr
-		} else if (sub == "hunter-submit" || sub == "critic-submit") && !strings.Contains(trimmed, `"output_dir"`) && !strings.Contains(trimmed, `"result"`) {
-			var obj map[string]any
-			if err := json.Unmarshal(b, &obj); err != nil {
-				return err
-			}
+			return nil
+		}
+		var obj map[string]any
+		if err := json.Unmarshal(b, &obj); err != nil {
+			return err
+		}
+		_, hasOutDir := obj["output_dir"]
+		_, hasResult := obj["result"]
+		_, hasRecord := obj["record"]
+		if (sub == "hunter-submit" || sub == "critic-submit") && !hasOutDir && !hasResult {
 			payload["result"] = obj
-		} else if (sub == "verifier-submit" || sub == "record-verify-submit") && !strings.Contains(trimmed, `"output_dir"`) && !strings.Contains(trimmed, `"record"`) {
-			var obj map[string]any
-			if err := json.Unmarshal(b, &obj); err != nil {
-				return err
-			}
+		} else if (sub == "verifier-submit" || sub == "record-verify-submit") && !hasOutDir && !hasRecord {
 			payload["record"] = obj
 		} else {
-			if err := json.Unmarshal(b, &payload); err != nil {
-				return err
+			for k, v := range obj {
+				payload[k] = v
 			}
 		}
 		return nil

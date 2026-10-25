@@ -234,9 +234,20 @@ func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageU
 		return nil, err
 	}
 	validBlocks := cat.ValidBlockMap()
+	selectedFileSet := make(map[string]bool, len(meta.SelectedCompanionFiles))
+	for _, f := range meta.SelectedCompanionFiles {
+		selectedFileSet[f] = true
+	}
 
 	units := make([]validator.CoverageUnit, 0, len(inputs))
 	for i, in := range inputs {
+		for _, blk := range in.SelectedCompanionBlocks {
+			if parts := strings.SplitN(blk, "#", 2); len(parts) == 2 && parts[0] != "ATTACK-CLASSES.md" {
+				if len(selectedFileSet) > 0 && !selectedFileSet[parts[0]] {
+					return nil, fmt.Errorf("unit[%d] selected_companion_block %q belongs to %q which is not in selected_companion_files %v", i, blk, parts[0], meta.SelectedCompanionFiles)
+				}
+			}
+		}
 		refs := in.CanonicalRefs
 		if refs.Surface == "" && in.Surface != "" {
 			refs.Surface = in.Surface

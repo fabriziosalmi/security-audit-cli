@@ -118,7 +118,19 @@ func TestRunStoreAtomicLifecycle(t *testing.T) {
 		t.Fatalf("expected WriteFileAtomic in missing directory to fail")
 	}
 
-	// Corrupt JSON parse error branches
+	// Corrupt JSON parse error branches + duplicate key rejection + symlink rejection
+	_ = os.WriteFile(st.MetadataPath(), []byte(`{"run_id":"a","run_id":"b"}`), 0o600)
+	if _, err := st.LoadMetadata(); err == nil {
+		t.Fatalf("expected LoadMetadata to reject duplicate JSON keys via ReadJSON")
+	}
+	symMeta := filepath.Join(tmp, "sym-meta.json")
+	_ = os.WriteFile(symMeta, []byte(`{"run_id":"a"}`), 0o600)
+	_ = os.Remove(st.MetadataPath())
+	_ = os.Symlink(symMeta, st.MetadataPath())
+	if _, err := st.LoadMetadata(); err == nil {
+		t.Fatalf("expected LoadMetadata to reject symlink via ReadFileNoFollow")
+	}
+	_ = os.Remove(st.MetadataPath())
 	_ = os.WriteFile(st.MetadataPath(), []byte("{bad"), 0o600)
 	if _, err := st.LoadMetadata(); err == nil {
 		t.Fatalf("expected LoadMetadata parse error")

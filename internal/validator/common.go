@@ -351,6 +351,38 @@ func VerifyRepoFileAndLine(targetDir, relPath string, line int) error {
 	return nil
 }
 
+// VerifyOutputRegularFile checks that relPath exists inside outputDir using kernel-enforced *os.Root
+// (rejecting intermediate symlinks, symlink leaves, FIFOs, devices, and directory escapes) and is a regular file.
+func VerifyOutputRegularFile(outputDir, relPath string) error {
+	if !IsSafeRelativePath(relPath) {
+		return fmt.Errorf("invalid output-relative path %q", relPath)
+	}
+	root, err := os.OpenRoot(outputDir)
+	if err != nil {
+		return fmt.Errorf("open output root: %w", err)
+	}
+	defer root.Close()
+
+	segments := strings.Split(relPath, "/")
+	for i := 0; i < len(segments)-1; i++ {
+		prefix := filepath.FromSlash(strings.Join(segments[:i+1], "/"))
+		fi, lerr := root.Lstat(prefix)
+		if lerr != nil {
+			return fmt.Errorf("promoted regular file %q does not exist in output directory", relPath)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+			return fmt.Errorf("promoted artifact path %q traverses a symlink or non-directory component", relPath)
+		}
+	}
+
+	osRel := filepath.FromSlash(relPath)
+	info, err := root.Lstat(osRel)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("promoted regular file %q does not exist in output directory", relPath)
+	}
+	return nil
+}
+
 // CanonicalJSONKey produces a deterministic string key for JSON uniqueness checks.
 func CanonicalJSONKey(v any) string {
 	b, _ := json.Marshal(v)

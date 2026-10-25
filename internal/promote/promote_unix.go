@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
@@ -30,7 +31,7 @@ func PromoteAllowlist(outputDir, agentID string, relPaths []string, maxFileBytes
 		maxFileBytes = 1 * 1024 * 1024 // 1 MiB default per-file
 	}
 	if maxTotalBytes <= 0 {
-		maxTotalBytes = 5 * 1024 * 1024 // 5 MiB default cumulative
+		maxTotalBytes = 10 * 1024 * 1024 // 10 MiB default cumulative
 	}
 
 	scratchPath := fmt.Sprintf("%s/agents/%s/scratch", strings.TrimRight(outputDir, "/"), agentID)
@@ -182,6 +183,10 @@ func promoteOne(
 		st2.Nlink != 1 || st1.Size != st2.Size || !fi1.ModTime().Equal(fi2.ModTime()) {
 		return fail("scratch file changed identity, type, link count, size, or mtime during promotion")
 	}
+	content := buf.Bytes()
+	if !utf8.Valid(content) || bytes.IndexByte(content, 0) != -1 {
+		return fail("scratch file must be valid UTF-8 text without NUL bytes")
+	}
 
 	// Step 7: Walk every parent component from retained artifacts-root descriptor with no-follow checks.
 	currDst := artifactsRoot
@@ -231,10 +236,14 @@ func promoteOne(
 		return fail("destination leaf is not a regular file with link count 1")
 	}
 
-	written, err := dstFile.Write(buf.Bytes())
+	written, err := dstFile.Write(content)
 	if err != nil || int64(written) != st1.Size {
 		_ = currDst.Remove(leaf)
 		return fail(fmt.Sprintf("destination write failed: %v", err))
+	}
+	if err := dstFile.Sync(); err != nil {
+		_ = currDst.Remove(leaf)
+		return fail(fmt.Sprintf("destination fsync failed: %v", err))
 	}
 
 	*cumulative += st1.Size

@@ -27,6 +27,12 @@ func SubmitVerifier(req VerifierSubmitRequest) (map[string]any, error) {
 	if !ok || assign.Role != "verifier" {
 		return nil, fmt.Errorf("agent_id %q is not a registered Phase 3 verifier", req.AgentID)
 	}
+	if assign.Completed {
+		return nil, fmt.Errorf("verifier %q has already submitted its result", req.AgentID)
+	}
+	if assign.Fingerprint != "" && assign.Fingerprint != req.Fingerprint {
+		return nil, fmt.Errorf("verifier %q was assigned to fingerprint %q, not %q", req.AgentID, assign.Fingerprint, req.Fingerprint)
+	}
 	env, ok := state.Candidates[req.Fingerprint]
 	if !ok {
 		return nil, fmt.Errorf("unknown candidate fingerprint %q", req.Fingerprint)
@@ -141,6 +147,12 @@ func SubmitRecordVerifier(req RecordVerifySubmitRequest) (map[string]any, error)
 	assign, ok := state.Agents[req.AgentID]
 	if !ok || assign.Role != "record_verifier" {
 		return nil, fmt.Errorf("agent_id %q is not a registered Phase 5 record_verifier", req.AgentID)
+	}
+	if assign.Completed {
+		return nil, fmt.Errorf("record_verifier %q has already submitted its result", req.AgentID)
+	}
+	if assign.Fingerprint != "" && assign.Fingerprint != req.Fingerprint {
+		return nil, fmt.Errorf("record_verifier %q was assigned to fingerprint %q, not %q", req.AgentID, assign.Fingerprint, req.Fingerprint)
 	}
 	env, ok := state.Candidates[req.Fingerprint]
 	if !ok || env.FinalRecord == nil {

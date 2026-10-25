@@ -31,9 +31,36 @@ func ResolveGitRef(targetDir string) (string, bool) {
 	return ref, dirty
 }
 
-// IsSubpath reports whether child is inside or equal to parent.
+// resolvePathSymlinks resolves existing ancestor symlinks while preserving any non-existent trailing path components.
+func resolvePathSymlinks(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return filepath.Clean(p)
+	}
+	curr := abs
+	var tail []string
+	for {
+		resolved, rerr := filepath.EvalSymlinks(curr)
+		if rerr == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return filepath.Clean(resolved)
+		}
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			return filepath.Clean(abs)
+		}
+		tail = append(tail, filepath.Base(curr))
+		curr = parent
+	}
+}
+
+// IsSubpath reports whether child is inside or equal to parent after resolving symlinks on existing path prefixes.
 func IsSubpath(parent, child string) bool {
-	rel, err := filepath.Rel(parent, child)
+	realParent := resolvePathSymlinks(parent)
+	realChild := resolvePathSymlinks(child)
+	rel, err := filepath.Rel(realParent, realChild)
 	if err != nil {
 		return false
 	}
@@ -76,8 +103,11 @@ func EvaluatePriorRuns(targetDir string, priorDirs []string) ([]store.PriorCarry
 
 	for _, pdir := range priorDirs {
 		findingsPath := filepath.Join(pdir, "findings.json")
-		raw, err := os.ReadFile(findingsPath)
+		raw, err := validator.ReadFileNoFollow(findingsPath)
 		if err != nil {
+			continue
+		}
+		if validator.ValidateJSONPreflight(raw) != nil {
 			continue
 		}
 		var findings []validator.Finding
@@ -152,9 +182,9 @@ func EvaluatePriorRuns(targetDir string, priorDirs []string) ([]store.PriorCarry
 	return carryovers, carried
 }
 
-// FileHashSHA256 returns the hex SHA-256 of a file for deterministic comparisons.
+// FileHashSHA256 returns the hex SHA-256 of a regular file (without following symlinks) for deterministic comparisons.
 func FileHashSHA256(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := validator.ReadFileNoFollow(path)
 	if err != nil {
 		return "", err
 	}

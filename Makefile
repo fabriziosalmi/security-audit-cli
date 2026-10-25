@@ -1,5 +1,5 @@
 # sec-audit developer Makefile.
-VERSION     ?= 0.1.0
+VERSION     ?= 0.1.2
 LDFLAGS     := -s -w
 INSTALL_BIN := $(HOME)/.local/bin/sec-audit
 
@@ -31,7 +31,10 @@ bench:
 	go test -bench=. -benchmem ./internal/validator ./internal/engine
 
 fuzz:
-	go test -fuzz=FuzzValidateFindingsBytes -fuzztime=5s ./internal/validator
+	go test -fuzz=FuzzValidateFindingsBytes -fuzztime=3s ./internal/validator
+	go test -fuzz=FuzzValidateCoverageLedgerBytes -fuzztime=3s ./internal/validator
+	go test -fuzz=FuzzValidateJSONPreflight -fuzztime=3s ./internal/validator
+	go test -fuzz=FuzzDeriveCoverageID -fuzztime=3s ./internal/validator
 
 install: build
 	@mkdir -p $(dir $(INSTALL_BIN))

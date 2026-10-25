@@ -1,7 +1,7 @@
 # sec-audit
 
 [![ci](https://img.shields.io/badge/ci-passing-brightgreen)](.github/workflows/ci.yml)
-[![release](https://img.shields.io/badge/release-v0.1.0-blue)](CHANGELOG.md)
+[![release](https://img.shields.io/badge/release-v0.1.2-blue)](CHANGELOG.md)
 [![go.mod](https://img.shields.io/badge/go-1.24%2B-00ADD8)](go.mod)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -73,7 +73,7 @@ Every subcommand accepts either CLI flags, `--input <path.json>`, or `--json '<r
 | :--- | :--- | :--- | :--- |
 | **1** | `sec-audit init` | `sec_audit_init` | Verifies `output_dir` is outside `target` (or git-ignored), enforces pre-recon budget reserve (`>= 6` for `quick`, `>= 7` for `standard`/`deep`), scans repository languages/manifests/companions, and evaluates prior-run carryovers. |
 | **1-2** | `sec-audit catalog` | `sec_audit_catalog` | Lists embedded companion playbooks or returns the verbatim Markdown and `When to use` guidance for any canonical `FILE.md#Heading` reference. |
-| **1** | `sec-audit architecture` | `sec_audit_architecture` | Validates visible prose and the ~1,000-word limit (`<= 1,150` words hard cap), then atomically writes `<output-dir>/architecture.md`. |
+| **1** | `sec-audit architecture` | `sec_audit_architecture` | Validates visible prose and the ~1,000-word limit (`<= 1,100` words hard cap), then atomically writes `<output-dir>/architecture.md`. |
 | **1** | `sec-audit ledger-seed` | `sec_audit_ledger_seed` | Derives RFC 3986 + Unicode NFC `coverage_id` values, verifies `starting_paths` inside `target` via `*os.Root`, checks companion block coverage against `selected_companion_files`, sorts units lexicographically, and writes `coverage-ledger.json`. |
 | **1-5** | `sec-audit agent-assign` | `sec_audit_agent_assign` | Validates canonical lowercase `agent_id`, enforces budget reserves for remaining critics/verifiers, enforces adversarial role separation, creates `agents/<id>/scratch` and `artifacts`, and compiles the role prompt. |
 | **2-5** | `sec-audit artifact-promote` | `sec_audit_artifact_promote` | Executes 11-step OS race-safe promotion from `agents/<id>/scratch` to `agents/<id>/artifacts` using `*os.Root`, `O_NOFOLLOW \| O_NONBLOCK`, `nlink == 1`, double-`Fstat`, and byte caps. |
@@ -111,9 +111,9 @@ Standard Go `encoding/json.Unmarshal` silently accepts duplicate JSON object key
 5. Opens descriptor with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`.
 6. Verifies `syscall.Fstat` on the opened descriptor (`S_IFREG`, `nlink == 1` to block hardlinks, size `<= maxFileBytes`).
 7. Reads in bounded chunks while enforcing both per-file (`1 MiB` default) and cumulative (`10 MiB` default) byte caps.
-8. Re-runs `syscall.Fstat` after reading and verifies `(Dev, Ino, Size, Mtim)` did not mutate during read.
+8. Re-runs `syscall.Fstat` after reading and verifies `(Dev, Ino, Mode, Nlink, Size, ModTime)` did not mutate during read.
 9. Rejects non-UTF-8 or binary content containing NUL bytes.
-10. Atomically writes the promoted file via `CreateTemp` + `Chmod(0600)` + `Sync()` + `Rename` inside `artifactsDir`.
+10. Walks destination parents via `artifactsRoot`, creates missing directories (`0700`), exclusively opens the destination leaf (`O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW`, `0600`), verifies `fstat` (`S_IFREG`, `nlink == 1`), writes, and calls `Sync()`.
 11. Returns the canonical run-relative artifact path (`agents/<agent-id>/artifacts/<rel>`).
 
 ### 4. Bit-for-Bit Reproducibility and `manifest.sha256` (`internal/store`, `internal/engine`)
@@ -134,6 +134,24 @@ make install
 ```
 
 `make install` compiles `sec-audit` with `-trimpath -ldflags="-s -w"`, removes any pre-existing binary at `~/.local/bin/sec-audit` before installing (preventing macOS `amfid` vnode cache `SIGKILL 137`), and applies an ad-hoc code signature on macOS.
+
+### Supply Chain Verification (SLSA Provenance, Cosign Keyless, SBOM)
+
+Every tagged GitHub release ([`.github/workflows/release.yml`](.github/workflows/release.yml)) publishes `CGO_ENABLED=0` reproducible archives (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows-amd64`), `SHA256SUMS.txt`, dual SBOMs (`sec-audit.sbom.spdx.json` and `sec-audit.sbom.cdx.json`), keyless Sigstore Cosign OIDC bundles (`.bundle`), and GitHub SLSA Build Provenance + SBOM attestations:
+
+```sh
+# 1. Verify SLSA Build Provenance and SBOM attestations via GitHub CLI
+gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
+
+# 2. Verify SHA256SUMS.txt and SBOMs via Sigstore Cosign keyless OIDC bundle
+cosign verify-blob \
+  --certificate-identity-regexp '^https://github.com/fabriziosalmi/security-audit-cli/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --bundle SHA256SUMS.txt.bundle \
+  SHA256SUMS.txt
+
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+```
 
 ---
 
@@ -253,15 +271,15 @@ Every completed audit run in `<output-dir>` produces 8 canonical files verified 
 
 ## Measured Performance and Benchmarks
 
-Measured on Apple M4 Pro (`darwin/arm64`, Go `1.27.2`) via `make bench` and `make fuzz`:
+Measured on Apple M4 (`darwin/arm64`, Go `1.24+`) via `make bench` and `make fuzz`:
 
 | Benchmark / Suite | Latency / Throughput | Memory (`B/op`) | Allocations (`allocs/op`) |
 | :--- | :--- | :--- | :--- |
-| [`BenchmarkDeriveCoverageID`](internal/validator/benchmark_test.go) | `2,967 ns/op` | `208 B/op` | `1 alloc/op` |
-| [`BenchmarkValidateCoverageLedger`](internal/validator/benchmark_test.go) | `21,312 ns/op` (`38.05 MB/s`) | `11,470 B/op` | `256 allocs/op` |
-| [`BenchmarkValidateFindings`](internal/validator/benchmark_test.go) | `26,053 ns/op` (`44.68 MB/s`) | `20,161 B/op` | `477 allocs/op` |
-| [`BenchmarkEndToEndWorkflow`](internal/engine/engine_test.go) (full 6-phase run + 10 APFS `fsync` calls) | `76.7 ms/op` | `319,618 B/op` | `1,520 allocs/op` |
-| [`FuzzValidateFindingsBytes`](internal/validator/benchmark_test.go) | `119,328 execs/sec` (`347,045` execs / 3s) | `n/a` | `0 crashes / 0 panics` |
+| [`BenchmarkDeriveCoverageID`](internal/validator/benchmark_test.go) | `3,041 ns/op` | `208 B/op` | `1 alloc/op` |
+| [`BenchmarkValidateCoverageLedger`](internal/validator/benchmark_test.go) | `19,951 ns/op` (`40.65 MB/s`) | `11,510 B/op` | `256 allocs/op` |
+| [`BenchmarkValidateFindings`](internal/validator/benchmark_test.go) | `26,282 ns/op` (`44.29 MB/s`) | `20,234 B/op` | `477 allocs/op` |
+| [`BenchmarkEndToEndWorkflow`](internal/engine/reproducibility_test.go) (full 6-phase run + 10 APFS `fsync` calls) | `80.9 ms/op` | `322,890 B/op` | `1,616 allocs/op` |
+| [`FuzzValidateFindingsBytes`](internal/validator/benchmark_test.go) | `147,798 execs/sec` (`598,631` execs / 5s) | `n/a` | `0 crashes / 0 panics` |
 
 ---
 
@@ -269,18 +287,18 @@ Measured on Apple M4 Pro (`darwin/arm64`, Go `1.27.2`) via `make bench` and `mak
 
 ```text
 security-audit-cli/
-├── cmd/sec-audit/          # CLI entrypoint and flag-to-JSON normalizer (88.3% coverage)
+├── cmd/sec-audit/          # CLI entrypoint and flag-to-JSON normalizer (89.8% coverage)
 └── internal/
-    ├── engine/             # Phase 1-6 state machine and role gates (78.5% coverage)
+    ├── engine/             # Phase 1-6 state machine and role gates (79.4% coverage)
     ├── mcp/                # JSON-RPC 2.0 stdio server (90.6% coverage)
-    ├── promote/            # 11-step *os.Root race-safe artifact promotion (82.9% coverage)
+    ├── promote/            # 11-step *os.Root race-safe artifact promotion (81.5% coverage)
     ├── prompt/             # Deterministic role prompt compiler (97.5% coverage)
-    ├── registry/           # Generic Bind[Req, Resp] 1:1 CLI/MCP registry (94.1% coverage)
+    ├── registry/           # Generic Bind[Req, Resp] 1:1 CLI/MCP registry (92.5% coverage)
     ├── report/             # Deterministic Markdown and SARIF 2.1.0 builders (92.2% coverage)
-    ├── scanner/            # Table-driven repo scanner and git/carryover inspector (86.4% coverage)
+    ├── scanner/            # Table-driven repo scanner and git/carryover inspector (89.4% coverage)
     ├── spec/               # Embedded playbooks and report-schema.json (94.2% coverage)
-    ├── store/              # RunStore and crash-safe WriteFileAtomic (81.6% coverage)
-    └── validator/          # O(N) JSON preflight, ledger/findings/root validators (83.9% coverage)
+    ├── store/              # RunStore and crash-safe WriteFileAtomic (81.4% coverage)
+    └── validator/          # O(N) JSON preflight, ledger/findings/root validators (84.0% coverage)
 ```
 
 ---

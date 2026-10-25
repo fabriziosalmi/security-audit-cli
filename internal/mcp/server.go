@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/registry"
+	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
 type jsonRPCRequest struct {
@@ -46,7 +47,7 @@ func DispatchTool(name string, rawArgs json.RawMessage) (any, error) {
 // ServeStdio runs the JSON-RPC 2.0 MCP server over r and w.
 func ServeStdio(r io.Reader, w io.Writer) error {
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
+	scanner.Buffer(make([]byte, 64*1024), validator.MaxInputBytes)
 	enc := json.NewEncoder(w)
 
 	for scanner.Scan() {
@@ -87,7 +88,7 @@ func handleRequest(req jsonRPCRequest) jsonRPCResponse {
 				},
 				"serverInfo": map[string]any{
 					"name":    "sec-audit",
-					"version": "1.0.0",
+					"version": "0.1.2",
 				},
 			},
 		}

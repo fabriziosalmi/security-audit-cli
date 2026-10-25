@@ -3,7 +3,6 @@ package prompt
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -29,7 +28,7 @@ func CompileHunter(
 	state *store.InternalState,
 	cat *spec.Catalog,
 ) (string, error) {
-	archBytes, err := os.ReadFile(filepath.Join(outputDir, "architecture.md"))
+	archBytes, err := validator.ReadFileNoFollow(filepath.Join(outputDir, "architecture.md"))
 	if err != nil {
 		return "", fmt.Errorf("architecture.md must be written before assigning hunters: %w", err)
 	}
@@ -178,7 +177,7 @@ func CompileRecordVerifier(env *store.CandidateEnvelope) string {
 
 // CompileCritic builds the Phase 2 coverage-critic prompt.
 func CompileCritic(outputDir string, units []validator.CoverageUnit) (string, error) {
-	archBytes, _ := os.ReadFile(filepath.Join(outputDir, "architecture.md"))
+	archBytes, _ := validator.ReadFileNoFollow(filepath.Join(outputDir, "architecture.md"))
 	ledgerJSON, _ := json.MarshalIndent(units, "", "  ")
 	return fmt.Sprintf(
 		"Review architecture and coverage-ledger.json for unmapped entry points, "+

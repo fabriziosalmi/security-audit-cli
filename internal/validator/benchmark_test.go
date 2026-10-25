@@ -166,3 +166,49 @@ func FuzzValidateFindingsBytes(f *testing.F) {
 		_ = validator.ValidateFindingsBytes(data, "")
 	})
 }
+
+func FuzzValidateCoverageLedgerBytes(f *testing.F) {
+	seedLedger := `[{"coverage_id":"src%2Fapi.go%23H::src%2Fapi.go%23H::src::ATTACK-CLASSES.md%23Injection",` +
+		`"canonical_refs":{"surface":"src/api.go#H","boundary":"src/api.go#H","subsystem":"src","attack_class":"ATTACK-CLASSES.md#Injection"},` +
+		`"surface":"H","boundary":"H","subsystem":"src","attack_class":"Injection","starting_paths":["src/api.go"],` +
+		`"ordinary_attack_class_block":"ATTACK-CLASSES.md#Injection","selected_companion_blocks":[],` +
+		`"excluded_blocks":[],"prior_status":"none","attempts":[],"wave":1,"status":"planned",` +
+		`"agent_id":null,"reviewed_paths":[],"local_checks":[],"result_fingerprints":[],"unresolved":[]}]`
+	f.Add([]byte(seedLedger))
+	f.Add([]byte(`[{"status":"planned","status":"covered"}]`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_ = validator.ValidateCoverageLedgerBytes(data, "", "", nil)
+	})
+}
+
+func FuzzValidateJSONPreflight(f *testing.F) {
+	f.Add([]byte(`{"a":1,"b":[true,false,null,"str"]}`))
+	f.Add([]byte(`{"dup":1,"dup":2}`))
+	f.Add([]byte(strings.Repeat("[", 70) + strings.Repeat("]", 70)))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_ = validator.ValidateJSONPreflight(data)
+	})
+}
+
+func FuzzDeriveCoverageID(f *testing.F) {
+	f.Add("src/router.ts#POST /users", "src/auth.ts#requireOwner", "src", "ATTACK-CLASSES.md#Access control", "rotate")
+	f.Add("cafe\u0301", "zero\u200Bwidth", "../escape", "bad", "")
+	f.Fuzz(func(t *testing.T, surf, bound, sub, ac, life string) {
+		var lp *string
+		if life != "" {
+			lp = &life
+		}
+		cid, err := validator.DeriveCoverageID(validator.CanonicalRefs{
+			Surface:     surf,
+			Boundary:    bound,
+			Subsystem:   sub,
+			AttackClass: ac,
+			Lifecycle:   lp,
+		})
+		if err == nil && (cid == "" || strings.Count(cid, "::") < 3) {
+			t.Fatalf("DeriveCoverageID returned malformed ID %q", cid)
+		}
+		_ = validator.IsSafeRelativePath(surf)
+		_ = validator.IsSafeAgentID(sub)
+	})
+}

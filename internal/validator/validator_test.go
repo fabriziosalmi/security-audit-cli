@@ -197,6 +197,17 @@ func TestValidateLedgerStateTableAndAttempts(t *testing.T) {
 		t.Fatalf("expected valid wave-2 candidate unit, got errors: %v", errs)
 	}
 
+	// Break-test: Symlinked parent directory or symlinked artifact inside outputDir must be rejected by VerifyOutputRegularFile
+	symArtOut := t.TempDir()
+	realArtDir := filepath.Join(t.TempDir(), "real-artifacts")
+	_ = os.MkdirAll(realArtDir, 0o700)
+	_ = os.WriteFile(filepath.Join(realArtDir, "check1.txt"), []byte("ok"), 0o600)
+	_ = os.MkdirAll(filepath.Join(symArtOut, "agents", "hunter-1"), 0o700)
+	_ = os.Symlink(realArtDir, filepath.Join(symArtOut, "agents", "hunter-1", "artifacts"))
+	if errs := validator.ValidateCoverageLedgerBytes(raw, repo, symArtOut, validBlocks); len(errs) == 0 {
+		t.Fatalf("expected VerifyOutputRegularFile to reject symlinked artifacts directory inside outputDir")
+	}
+
 	// Test all status state-table invariants: planned, deferred, in_progress
 	for _, st := range []string{"planned", "deferred", "in_progress"} {
 		u := unit

@@ -85,7 +85,13 @@ func TestPromoteAllowlistAndBreakTests(t *testing.T) {
 		t.Fatalf("expected cumulative byte limit to block promotion, got %+v err=%v", resTotalCap, err)
 	}
 
-	// Break-test 4: Invalid agent ID, missing scratch dir, or path traversal
+	// Break-test 4: Invalid agent ID, missing scratch dir, path traversal, or binary/NUL content
+	nulPath := filepath.Join(scratch, "binary.bin")
+	_ = os.WriteFile(nulPath, []byte("text\x00with-nul"), 0o600)
+	resNul, err := PromoteAllowlist(outDir, agentID, []string{"binary.bin"}, 1024, 4096)
+	if err != nil || len(resNul) != 1 || resNul[0].Promoted || !strings.Contains(resNul[0].Blocker, "UTF-8") {
+		t.Fatalf("expected NUL-byte file promotion to be blocked, got %+v err=%v", resNul, err)
+	}
 	if _, err := PromoteAllowlist(outDir, "../bad", []string{"second.txt"}, 1024, 4096); err == nil {
 		t.Fatalf("expected invalid agent_id to fail")
 	}

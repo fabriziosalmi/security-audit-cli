@@ -75,6 +75,7 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 		OutputDir:  scopedOut,
 		Profile:    "standard",
 		ScopePaths: []string{"src"},
+		Companions: []string{"WEB-PROTOCOL-AND-AUTH.md"},
 		Budget:     &tightBudget,
 	}); err != nil {
 		t.Fatalf("Init scoped failed: %v", err)
@@ -84,6 +85,17 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 	}
 
 	block := "ATTACK-CLASSES.md#Injection"
+	if _, err := engine.SeedLedger(scopedOut, []engine.SeedUnitInput{
+		{
+			Surface: "A", Boundary: "A", Subsystem: "src", AttackClass: block,
+			StartingPaths:            []string{"src/a.go"},
+			OrdinaryAttackClassBlock: &block,
+			SelectedCompanionBlocks:  []string{"AI-AND-LLM.md#Prompt and instruction boundaries"},
+		},
+	}); err == nil {
+		t.Fatalf("expected SeedLedger to reject companion block from unselected companion file")
+	}
+
 	units, err := engine.SeedLedger(scopedOut, []engine.SeedUnitInput{
 		{
 			CanonicalRefs: validator.CanonicalRefs{
@@ -193,6 +205,36 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AssignAgent q-hunter: %v", err)
 	}
+	// Break-test: hunter omitting starting_path from reviewed_paths must fail
+	if _, err := engine.SubmitHunter(quickOut, "q-hunter", engine.HunterStructuredResult{
+		Units: []engine.HunterUnitResult{
+			{
+				CoverageID:    qCID,
+				Disposition:   "covered",
+				ReviewedPaths: []string{"other.go"},
+				Checks: []validator.LocalCheck{{
+					AgentID: "q-hunter", ReviewedPaths: []string{"other.go"}, Invariant: "inv", Method: "source", Result: "res",
+				}},
+			},
+		},
+	}); err == nil {
+		t.Fatalf("expected SubmitHunter to reject reviewed_paths missing starting_path src/a.go")
+	}
+	// Break-test: hunter submitting check with wrong agent_id must fail
+	if _, err := engine.SubmitHunter(quickOut, "q-hunter", engine.HunterStructuredResult{
+		Units: []engine.HunterUnitResult{
+			{
+				CoverageID:    qCID,
+				Disposition:   "covered",
+				ReviewedPaths: []string{"src/a.go"},
+				Checks: []validator.LocalCheck{{
+					AgentID: "other-hunter", ReviewedPaths: []string{"src/a.go"}, Invariant: "inv", Method: "source", Result: "res",
+				}},
+			},
+		},
+	}); err == nil {
+		t.Fatalf("expected SubmitHunter to reject check.agent_id != submitting hunter")
+	}
 	qCheck := validator.LocalCheck{
 		AgentID: "q-hunter", ReviewedPaths: []string{"src/a.go"}, Invariant: "inv", Method: "source", Result: "res",
 	}
@@ -223,9 +265,17 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 			},
 		},
 		Hardening: []string{"Enable strict headers"},
+		Uncovered: []engine.UncoveredEntry{
+			{Surface: "other.go#B", Boundary: "other.go#B", Subsystem: "root", AttackClass: block, StartingPaths: []string{"other.go"}, Reason: "new"},
+		},
 	}); err != nil {
 		t.Fatalf("SubmitHunter quick: %v", err)
 	}
+	// Break-test: duplicate hunter submission must fail
+	if _, err := engine.SubmitHunter(quickOut, "q-hunter", engine.HunterStructuredResult{}); err == nil {
+		t.Fatalf("expected duplicate SubmitHunter from same agent_id to fail")
+	}
+	// Break-test: Render while UncoveredQueue is non-empty must fail until a critic processes it
 	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
 		OutputDir: quickOut, Role: "verifier", AgentID: "q-verifier", Fingerprint: "FIND-Q1",
 	}); err != nil {
@@ -278,6 +328,31 @@ func TestBudgetGatesScopeAndCatalog(t *testing.T) {
 		},
 	}); err != nil {
 		t.Fatalf("SubmitVerifier quick rejected: %v", err)
+	}
+	// Break-test: duplicate verifier submission must be rejected
+	if _, err := engine.SubmitVerifier(engine.VerifierSubmitRequest{
+		OutputDir:   quickOut,
+		AgentID:     "q-verifier",
+		Fingerprint: "FIND-Q1",
+		Decision:    "rejected",
+		Record:      map[string]any{},
+	}); err == nil {
+		t.Fatalf("expected duplicate SubmitVerifier from same agent_id to fail")
+	}
+	// Break-test: Render with unprocessed UncoveredQueue must fail before critic clears it
+	if _, err := engine.Render(engine.RenderRequest{OutputDir: quickOut}); err == nil {
+		t.Fatalf("expected Render to fail while UncoveredQueue has unprocessed hunter entries")
+	}
+	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
+		OutputDir: quickOut, Role: "critic", AgentID: "q-critic",
+	}); err != nil {
+		t.Fatalf("AssignAgent q-critic: %v", err)
+	}
+	if _, err := engine.SubmitCritic(quickOut, "q-critic", "post_wave", engine.CriticResult{Stop: true}); err != nil {
+		t.Fatalf("SubmitCritic q-critic: %v", err)
+	}
+	if _, err := engine.SubmitCritic(quickOut, "q-critic", "post_wave", engine.CriticResult{Stop: true}); err == nil {
+		t.Fatalf("expected duplicate SubmitCritic from same agent_id to fail")
 	}
 	qRender, err := engine.Render(engine.RenderRequest{OutputDir: quickOut})
 	if err != nil || qRender.RejectedCount != 1 || qRender.RunStatus != "complete" {

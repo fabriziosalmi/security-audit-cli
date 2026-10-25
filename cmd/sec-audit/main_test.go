@@ -182,4 +182,12 @@ func TestCLIRunnerAndFlagParsing(t *testing.T) {
 	if err != nil || !strings.Contains(string(mergedJSON), outDir) {
 		t.Fatalf("expected --output-dir to merge into --json payload, got err=%v raw=%s", err, string(mergedJSON))
 	}
+
+	// 10. Break-test: verifier-submit record containing "output_dir" inside prose must still be wrapped in "record"
+	proseFile := filepath.Join(tmpInputDir, "prose-record.json")
+	_ = os.WriteFile(proseFile, []byte(`{"verdict":"rejected","description":"Fixes bug in output_dir handling"}`), 0o600)
+	rawProse, err := parseSubcommandFlags("verifier-submit", []string{"--output-dir", outDir, "--input", proseFile}, strings.NewReader(""))
+	if err != nil || !strings.Contains(string(rawProse), `"record":{`) {
+		t.Fatalf("expected record with 'output_dir' in description to still wrap under 'record', got err=%v raw=%s", err, string(rawProse))
+	}
 }

@@ -27,6 +27,9 @@ func SubmitCritic(outputDir, agentID, criticKind string, result CriticResult) (m
 	if !ok || assign.Role != "critic" {
 		return nil, fmt.Errorf("agent_id %q is not a registered critic", agentID)
 	}
+	if assign.Completed {
+		return nil, fmt.Errorf("critic %q has already submitted its result", agentID)
+	}
 	units, err := rs.LoadLedger()
 	if err != nil {
 		return nil, err
@@ -175,6 +178,7 @@ func SubmitCritic(outputDir, agentID, criticKind string, result CriticResult) (m
 	if reassignedCount > 0 || addedCount > 0 {
 		state.CurrentWave = nextWave
 	}
+	state.UncoveredQueue = []UncoveredEntry{}
 	if criticKind == "final_clean" && addedCount == 0 && reassignedCount == 0 && result.Stop {
 		state.FinalCleanDone = true
 	} else {

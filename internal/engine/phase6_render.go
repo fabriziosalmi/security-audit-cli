@@ -112,6 +112,12 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 			unvalidatedFPs, unverifiedPhase5FPs,
 		)
 	}
+	if len(state.UncoveredQueue) > 0 && meta.RunStatus != "incomplete" {
+		return nil, fmt.Errorf(
+			"cannot mark run complete while %d uncovered hunter entries have not been reviewed by a coverage critic",
+			len(state.UncoveredQueue),
+		)
+	}
 
 	var confirmed, needsVal, rejected []validator.Finding
 	for _, f := range findings {
