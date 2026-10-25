@@ -41,7 +41,7 @@ jobs:
         with:
           go-version: '1.25.x'
       - name: Run vet and race test gate
-        if: !(matrix.goos == 'linux' && matrix.goarch == 'arm64')
+        if: matrix.goos != 'linux' || matrix.goarch != 'arm64'
         run: go vet ./... && go test -count=1 -race -timeout 120s ./...
       - name: Build deterministic binary
         env:
@@ -125,10 +125,12 @@ jobs:
               "$target"
           done
       - name: Attest SLSA Build Provenance for release archives
+        if: github.event.repository.private == false
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: "release/sec-audit-*"
+          subject-path: "release/sec-audit-*.tar.gz"
       - name: Attest SBOM Provenance
+        if: github.event.repository.private == false
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: "release/sec-audit-*.tar.gz"

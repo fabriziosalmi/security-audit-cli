@@ -31,6 +31,16 @@ jobs:
       - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: "/language:go"
+          output: sarif-results
+          upload: ${{ github.event.repository.private == false }}
+      - name: Enforce zero CodeQL findings
+        run: |
+          count=$(jq '[.runs[].results[]] | length' sarif-results/go.sarif)
+          echo "CodeQL findings: $count"
+          if [ "$count" -ne 0 ]; then
+            jq '.runs[].results[]' sarif-results/go.sarif
+            exit 1
+          fi
 
   scorecard:
     name: OpenSSF Scorecard
