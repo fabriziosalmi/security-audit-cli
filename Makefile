@@ -32,10 +32,10 @@ bench:
 	go test -bench=. -benchmem ./internal/validator ./internal/engine
 
 fuzz:
-	go test -fuzz=FuzzValidateFindingsBytes -fuzztime=3s ./internal/validator
-	go test -fuzz=FuzzValidateCoverageLedgerBytes -fuzztime=3s ./internal/validator
-	go test -fuzz=FuzzValidateJSONPreflight -fuzztime=3s ./internal/validator
-	go test -fuzz=FuzzDeriveCoverageID -fuzztime=3s ./internal/validator
+	go test -fuzz=FuzzValidateFindingsBytes -fuzztime=10000x ./internal/validator
+	go test -fuzz=FuzzValidateCoverageLedgerBytes -fuzztime=10000x ./internal/validator
+	go test -fuzz=FuzzValidateJSONPreflight -fuzztime=10000x ./internal/validator
+	go test -fuzz=FuzzDeriveCoverageID -fuzztime=10000x ./internal/validator
 
 install: build
 	@mkdir -p $(dir $(INSTALL_BIN))

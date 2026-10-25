@@ -19,12 +19,12 @@ func TestBuildDeterministicVSIX(t *testing.T) {
 	defer r.Close()
 
 	want := map[string]bool{
-		"[Content_Types].xml":       false,
-		"extension.vsixmanifest":    false,
-		"extension/package.json":    false,
-		"extension/extension.js":    false,
-		"extension/README.md":       false,
-		"extension/media/icon.svg":  false,
+		"[Content_Types].xml":      false,
+		"extension.vsixmanifest":   false,
+		"extension/package.json":   false,
+		"extension/extension.js":   false,
+		"extension/README.md":      false,
+		"extension/media/icon.svg": false,
 	}
 	for _, f := range r.File {
 		if _, ok := want[f.Name]; ok {

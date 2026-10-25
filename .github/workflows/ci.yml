@@ -31,7 +31,7 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Check gofmt
         run: |
-          unformatted="$(gofmt -l cmd/ internal/)"
+          unformatted="$(gofmt -l cmd/ internal/ editors/)"
           if [ -n "$unformatted" ]; then
             echo "::error::gofmt needed on: $unformatted"
             exit 1
@@ -45,10 +45,10 @@ jobs:
       - name: Run deterministic fuzz harnesses (smoke)
         if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25.x'
         run: |
-          go test -fuzz=FuzzValidateFindingsBytes -fuzztime=2s ./internal/validator
-          go test -fuzz=FuzzValidateCoverageLedgerBytes -fuzztime=2s ./internal/validator
-          go test -fuzz=FuzzValidateJSONPreflight -fuzztime=2s ./internal/validator
-          go test -fuzz=FuzzDeriveCoverageID -fuzztime=2s ./internal/validator
+          go test -fuzz=FuzzValidateFindingsBytes -fuzztime=10000x ./internal/validator
+          go test -fuzz=FuzzValidateCoverageLedgerBytes -fuzztime=10000x ./internal/validator
+          go test -fuzz=FuzzValidateJSONPreflight -fuzztime=10000x ./internal/validator
+          go test -fuzz=FuzzDeriveCoverageID -fuzztime=10000x ./internal/validator
 
   govulncheck:
     name: govulncheck
