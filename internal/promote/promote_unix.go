@@ -124,9 +124,13 @@ func promoteOne(
 	defer srcFile.Close()
 
 	// Step 4: Verify with fstat that it is a regular file with link count == 1 and within byte limits.
-	var st1 syscall.Stat_t
-	if err := syscall.Fstat(int(srcFile.Fd()), &st1); err != nil {
+	fi1, err := srcFile.Stat()
+	if err != nil {
 		return fail(fmt.Sprintf("scratch leaf %q fstat failed: %v", leaf, err))
+	}
+	st1, ok := fi1.Sys().(*syscall.Stat_t)
+	if !ok || st1 == nil {
+		return fail("scratch leaf fstat did not return syscall.Stat_t")
 	}
 	if (st1.Mode & syscall.S_IFMT) != syscall.S_IFREG {
 		return fail("scratch leaf is not a regular file on fstat")
@@ -166,12 +170,16 @@ func promoteOne(
 	if readBytes != st1.Size {
 		return fail(fmt.Sprintf("read size %d did not match initial fstat size %d", readBytes, st1.Size))
 	}
-	var st2 syscall.Stat_t
-	if err := syscall.Fstat(int(srcFile.Fd()), &st2); err != nil {
+	fi2, err := srcFile.Stat()
+	if err != nil {
 		return fail(fmt.Sprintf("second fstat failed: %v", err))
 	}
+	st2, ok := fi2.Sys().(*syscall.Stat_t)
+	if !ok || st2 == nil {
+		return fail("second fstat did not return syscall.Stat_t")
+	}
 	if st1.Dev != st2.Dev || st1.Ino != st2.Ino || st1.Mode != st2.Mode ||
-		st2.Nlink != 1 || st1.Size != st2.Size || st1.Mtimespec != st2.Mtimespec {
+		st2.Nlink != 1 || st1.Size != st2.Size || !fi1.ModTime().Equal(fi2.ModTime()) {
 		return fail("scratch file changed identity, type, link count, size, or mtime during promotion")
 	}
 

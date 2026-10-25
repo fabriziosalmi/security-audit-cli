@@ -28,6 +28,8 @@ All notable changes to this project are documented in this file. The format is b
 - **AI Worktree Pruning & Companion Precision (`internal/scanner`)**:
   - Ignored `.claude`, `.cursor`, `.gemini`, `.codex`, `.worktrees`, `worktrees`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.vitepress`, `.astro`, `_site`, `.terraform`, `dist-*`, `build-*`, `*.xcodeproj`, and `*.xcworkspace` during repository walks.
   - Prevented `LaunchAgent` and `user_agent` identifiers from triggering `AI-AND-LLM.md`, Go `*_unix.go` build-tag files from triggering `DESKTOP-MOBILE-AND-LOCAL-IPC.md`, and LLM `token_counter` files from triggering false-positive `auth_boundary_candidates`.
+- **Linux `syscall.Stat_t` Portability (`internal/promote`)**:
+  - Replaced Darwin-specific `Stat_t.Mtimespec` comparison in `promoteOne` with portable `os.FileInfo.ModTime().Equal(...)` alongside `Stat_t` device/inode/mode/nlink checks.
 
 ## [0.1.0] - 2026-10-25
 
