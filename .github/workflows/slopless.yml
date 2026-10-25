@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run slopless
-        uses: fabriziosalmi/slopless@dbee19ee7aeb728821c0886fe02bea67b14eeb25 # v1.17.0
+        uses: fabriziosalmi/slopless@46b53d641204290c8cef061b76b225dba912ff8a # v1.18.1
         with:
           patterns: "cmd/**/*.go internal/**/*.go *.md"
           format: sarif
