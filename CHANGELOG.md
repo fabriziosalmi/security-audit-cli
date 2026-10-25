@@ -11,7 +11,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Added
 
 - **Supply Chain Integrity, SLSA Provenance, Keyless Cosign, and Dual SBOMs (`.github/workflows/release.yml`, `.github/workflows/security.yml`, `.github/dependabot.yml`)**:
-  - Added reproducible `CGO_ENABLED=0` multi-architecture release workflow (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows-amd64`) with macOS ad-hoc codesigning, `SHA256SUMS.txt`, SPDX + CycloneDX SBOM generation (`anchore/sbom-action`), keyless Sigstore Cosign OIDC signing and verification (`cosign sign-blob` / `cosign verify-blob`), and GitHub SLSA Build Provenance + SBOM attestations (`actions/attest-build-provenance`, `actions/attest-sbom`).
+  - Added reproducible `CGO_ENABLED=0` multi-architecture release workflow (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`) with macOS ad-hoc codesigning, `SHA256SUMS.txt`, SPDX + CycloneDX SBOM generation (`anchore/sbom-action`), keyless Sigstore Cosign OIDC signing and verification (`cosign sign-blob` / `cosign verify-blob`), and GitHub SLSA Build Provenance + SBOM attestations (`actions/attest-build-provenance`, `actions/attest-sbom`).
   - Added `.github/workflows/security.yml` running CodeQL Go SAST and OpenSSF Scorecard with SARIF upload, `govulncheck` + 4 fuzz targets in `ci.yml`, and `.github/dependabot.yml` for SHA-pinned actions and `gomod`.
 - **Expanded Fuzzing and Adversarial E2E Test Matrix (`internal/validator`, `internal/engine`)**:
   - Added `FuzzValidateCoverageLedgerBytes`, `FuzzValidateJSONPreflight`, and `FuzzDeriveCoverageID` alongside `FuzzValidateFindingsBytes`.

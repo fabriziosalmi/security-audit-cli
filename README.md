@@ -137,7 +137,7 @@ make install
 
 ### Supply Chain Verification (SLSA Provenance, Cosign Keyless, SBOM)
 
-Every tagged GitHub release ([`.github/workflows/release.yml`](.github/workflows/release.yml)) publishes `CGO_ENABLED=0` reproducible archives (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows-amd64`), `SHA256SUMS.txt`, dual SBOMs (`sec-audit.sbom.spdx.json` and `sec-audit.sbom.cdx.json`), keyless Sigstore Cosign OIDC bundles (`.bundle`), and GitHub SLSA Build Provenance + SBOM attestations:
+Every tagged GitHub release ([`.github/workflows/release.yml`](.github/workflows/release.yml)) publishes `CGO_ENABLED=0` reproducible POSIX archives (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`), `SHA256SUMS.txt`, dual SBOMs (`sec-audit.sbom.spdx.json` and `sec-audit.sbom.cdx.json`), keyless Sigstore Cosign OIDC bundles (`.bundle`), and GitHub SLSA Build Provenance + SBOM attestations:
 
 ```sh
 # 1. Verify SLSA Build Provenance and SBOM attestations via GitHub CLI

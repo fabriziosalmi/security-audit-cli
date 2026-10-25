@@ -34,7 +34,7 @@ jobs:
 
   scorecard:
     name: OpenSSF Scorecard
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !github.event.repository.private
     runs-on: ubuntu-latest
     permissions:
       security-events: write

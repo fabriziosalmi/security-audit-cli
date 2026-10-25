@@ -33,10 +33,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             os: macos-latest
-          - goos: windows
-            goarch: amd64
-            os: ubuntu-latest
-            ext: .exe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,7 +41,7 @@ jobs:
         with:
           go-version: '1.25.x'
       - name: Run vet and race test gate
-        if: matrix.goos != 'windows' && !(matrix.goos == 'linux' && matrix.goarch == 'arm64')
+        if: !(matrix.goos == 'linux' && matrix.goarch == 'arm64')
         run: go vet ./... && go test -count=1 -race -timeout 120s ./...
       - name: Build deterministic binary
         env:
@@ -54,7 +50,7 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir -p dist
-          bin="dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          bin="dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -trimpath -ldflags="-s -w" -o "$bin" ./cmd/sec-audit
       - name: Ad-hoc codesign (darwin)
         if: matrix.goos == 'darwin'
@@ -65,19 +61,13 @@ jobs:
       - name: Package archive
         run: |
           cd dist
-          bin="sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip -q "sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "$bin"
-          else
-            tar -czf "sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "$bin"
-          fi
+          bin="sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}"
+          tar -czf "sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "$bin"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-            dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.zip
-          if-no-files-found: ignore
+          path: dist/sec-audit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          if-no-files-found: error
 
   release:
     name: SBOM, Cosign Keyless, SLSA Provenance & Release
