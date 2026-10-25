@@ -1,0 +1,297 @@
+package engine
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/fabriziosalmi/security-audit-cli/internal/scanner"
+	"github.com/fabriziosalmi/security-audit-cli/internal/spec"
+	"github.com/fabriziosalmi/security-audit-cli/internal/store"
+	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
+)
+
+// Init initializes an audit run directory, enforces the strict pre-reconnaissance budget gate,
+// scans the target repository deterministically, and processes prior-run ledgers/findings.
+func Init(req InitRequest) (*InitResponse, error) {
+	if req.Target == "" {
+		return nil, fmt.Errorf("target repository path is required")
+	}
+	absTarget, err := filepath.Abs(req.Target)
+	if err != nil {
+		return nil, fmt.Errorf("resolve target path: %w", err)
+	}
+	st, err := os.Stat(absTarget)
+	if err != nil || !st.IsDir() {
+		return nil, fmt.Errorf("target %q must be an existing directory", absTarget)
+	}
+
+	profile := req.Profile
+	if profile == "" {
+		profile = "standard"
+	}
+	if profile != "quick" && profile != "standard" && profile != "deep" {
+		return nil, fmt.Errorf("invalid profile %q (expected quick, standard, or deep)", profile)
+	}
+
+	repoName := filepath.Base(absTarget)
+	sourceRef, dirty := scanner.ResolveGitRef(absTarget)
+
+	outputDir := req.OutputDir
+	if outputDir == "" {
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			home = os.TempDir()
+		}
+		baseOut := filepath.Join(home, "security-audit-skill", repoName)
+		outputDir = scanner.NextRunDir(baseOut)
+	} else {
+		absOut, err := filepath.Abs(outputDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve output_dir: %w", err)
+		}
+		outputDir = absOut
+	}
+
+	// Enforce target-containment safety rule from SKILL.md
+	if scanner.IsSubpath(absTarget, outputDir) {
+		if !scanner.IsGitIgnored(absTarget, outputDir) {
+			return nil, fmt.Errorf("output_dir %q is inside target %q and is not ignored by version control; choose an external path or add it to .gitignore", outputDir, absTarget)
+		}
+	}
+
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create output_dir: %w", err)
+	}
+
+	scopePaths := req.ScopePaths
+	if scopePaths == nil {
+		scopePaths = []string{}
+	}
+	for _, sp := range scopePaths {
+		if err := validator.VerifyRepoFileAndLine(absTarget, sp, 0); err != nil {
+			return nil, fmt.Errorf("invalid scope_path %q: %w", sp, err)
+		}
+	}
+
+	brief := scanner.ScanRepository(absTarget)
+	var companionNames []string
+	for _, rc := range brief.RecommendedCompanions {
+		companionNames = append(companionNames, rc.File)
+	}
+
+	// Strict pre-reconnaissance budget gate from SKILL.md
+	runStatus := "in_progress"
+	incompleteReason := ""
+	if req.Budget != nil {
+		minRequired := 4 + 1 + 1 // 4 recon + 1 post-wave critic + 1 verifier = 6 for quick
+		if profile == "standard" || profile == "deep" {
+			minRequired = 4 + 2 + 1 // 4 recon + 2 critics + 1 verifier = 7 for standard/deep
+		}
+		if *req.Budget < minRequired {
+			runStatus = "incomplete"
+			incompleteReason = "budget_cannot_fund_reconnaissance_and_reserves"
+		}
+	}
+
+	priorPaths := req.PriorRunDirs
+	if priorPaths == nil {
+		priorPaths = []string{}
+	}
+	carryovers, carriedCandidates := scanner.EvaluatePriorRuns(absTarget, priorPaths)
+
+	meta := RunMetadata{
+		RunID:                  filepath.Base(outputDir),
+		Repo:                   repoName,
+		Target:                 absTarget,
+		SourceRef:              sourceRef,
+		DirtyWorktree:          dirty,
+		Profile:                profile,
+		ScopePaths:             scopePaths,
+		Budget:                 req.Budget,
+		AgentsSpent:            0,
+		ExecutionPolicy:        "sandboxed-source-and-local-only",
+		SelectedCompanionFiles: companionNames,
+		PriorRunPaths:          priorPaths,
+		SharedFileOwners: map[string]string{
+			"run-metadata.json":    "parent",
+			"architecture.md":      "parent",
+			"coverage-ledger.json": "parent",
+			"findings.json":        "parent",
+			"REPORT.md":            "parent",
+			"FINDINGS-DETAIL.md":   "parent",
+			"NEEDS-VALIDATION.md":  "parent",
+		},
+		RunStatus:        runStatus,
+		IncompleteReason: incompleteReason,
+	}
+
+	rs := store.New(outputDir)
+	if err := rs.SaveMetadata(&meta); err != nil {
+		return nil, err
+	}
+	if err := rs.SaveLedger([]validator.CoverageUnit{}); err != nil {
+		return nil, err
+	}
+
+	state := &InternalState{
+		CurrentWave:     1,
+		Agents:          make(map[string]*AgentAssignment),
+		Candidates:      carriedCandidates,
+		HardeningNotes:  []string{},
+		UncoveredQueue:  []UncoveredEntry{},
+		PriorCarryovers: carryovers,
+	}
+	if err := rs.SaveState(state); err != nil {
+		return nil, err
+	}
+
+	return &InitResponse{
+		OutputDir:       outputDir,
+		Metadata:        meta,
+		RepoBrief:       brief,
+		PriorCarryovers: carryovers,
+	}, nil
+}
+
+// CatalogQuery lists companion files or returns a specific block's verbatim content.
+func CatalogQuery(file, blockRef string) (any, error) {
+	cat, err := spec.LoadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	if blockRef != "" {
+		b, ok := cat.Blocks[blockRef]
+		if !ok {
+			return nil, fmt.Errorf("unknown block reference %q", blockRef)
+		}
+		return b, nil
+	}
+	if file != "" {
+		cf, ok := cat.Files[file]
+		if !ok {
+			return nil, fmt.Errorf("unknown companion file %q", file)
+		}
+		return cf, nil
+	}
+	var list []*spec.CompanionFile
+	for _, f := range cat.FileOrder {
+		list = append(list, cat.Files[f])
+	}
+	return list, nil
+}
+
+// WriteArchitecture validates and writes <output-dir>/architecture.md, enforcing the ~1,000 word cap.
+func WriteArchitecture(outputDir, content string) (map[string]any, error) {
+	archPath, words, err := store.New(outputDir).SaveArchitecture(content)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"path":       archPath,
+		"word_count": words,
+		"status":     "ok",
+	}, nil
+}
+
+// SeedLedger deterministically derives coverage_ids, verifies starting_paths on disk and block refs against the catalog,
+// sorts units lexicographically, validates the ledger, and writes <output-dir>/coverage-ledger.json.
+func SeedLedger(outputDir string, inputs []SeedUnitInput) ([]validator.CoverageUnit, error) {
+	rs := store.New(outputDir)
+	meta, err := rs.LoadMetadata()
+	if err != nil {
+		return nil, err
+	}
+	cat, err := spec.LoadCatalog()
+	if err != nil {
+		return nil, err
+	}
+	validBlocks := cat.ValidBlockMap()
+
+	units := make([]validator.CoverageUnit, 0, len(inputs))
+	for i, in := range inputs {
+		refs := in.CanonicalRefs
+		if meta.Profile == "quick" {
+			refs.Subsystem = "profile/quick/all-in-scope-subsystems"
+		}
+		if in.Lifecycle != nil && refs.Lifecycle == nil {
+			refs.Lifecycle = in.Lifecycle
+		}
+		cid, err := validator.DeriveCoverageID(refs)
+		if err != nil {
+			return nil, fmt.Errorf("unit[%d] canonical_refs error: %w", i, err)
+		}
+
+		priorStatus := in.PriorStatus
+		if priorStatus == "" {
+			if len(meta.PriorRunPaths) > 0 {
+				priorStatus = "new"
+			} else {
+				priorStatus = "none"
+			}
+		}
+
+		status := "planned"
+		var unresolved []string
+		if len(meta.ScopePaths) > 0 && !scanner.AnyPathInScope(in.StartingPaths, meta.ScopePaths) {
+			status = "out_of_scope"
+			unresolved = []string{"outside_requested_scope_paths"}
+		} else {
+			unresolved = []string{}
+		}
+
+		selectedCompanions := cat.ExpandCompanionBlocks(in.SelectedCompanionBlocks)
+		if selectedCompanions == nil {
+			selectedCompanions = []string{}
+		}
+
+		units = append(units, validator.CoverageUnit{
+			CoverageID:               cid,
+			CanonicalRefs:            refs,
+			Surface:                  in.Surface,
+			Boundary:                 in.Boundary,
+			Subsystem:                in.Subsystem,
+			AttackClass:              in.AttackClass,
+			Lifecycle:                in.Lifecycle,
+			StartingPaths:            in.StartingPaths,
+			OrdinaryAttackClassBlock: in.OrdinaryAttackClassBlock,
+			SelectedCompanionBlocks:  selectedCompanions,
+			ExcludedBlocks:           nonNilExcluded(in.ExcludedBlocks),
+			PriorStatus:              priorStatus,
+			Attempts:                 []validator.ArchivedAttempt{},
+			Wave:                     1,
+			Status:                   status,
+			AgentID:                  nil,
+			ReviewedPaths:            []string{},
+			LocalChecks:              []validator.LocalCheck{},
+			ResultFingerprints:       []string{},
+			Unresolved:               unresolved,
+		})
+	}
+
+	sort.Slice(units, func(i, j int) bool {
+		return units[i].CoverageID < units[j].CoverageID
+	})
+
+	rawBytes, err := json.MarshalIndent(units, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	errs := validator.ValidateCoverageLedgerBytes(rawBytes, meta.Target, outputDir, validBlocks)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("coverage-ledger validation failed (%d errors): %s", len(errs), strings.Join(errs, "; "))
+	}
+
+	if err := rs.SaveLedger(units); err != nil {
+		return nil, err
+	}
+	return units, nil
+}
+
+// FileHashSHA256 delegates to scanner.FileHashSHA256 for deterministic file digest comparison.
+func FileHashSHA256(path string) (string, error) {
+	return scanner.FileHashSHA256(path)
+}

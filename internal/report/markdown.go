@@ -1,164 +1,15 @@
-package engine
+package report
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
-// RenderRequest is the input for sec-audit render / sec_audit_render.
-type RenderRequest struct {
-	OutputDir        string `json:"output_dir"`
-	IncompleteReason string `json:"incomplete_reason,omitempty"`
-}
-
-// RenderResponse lists the generated Phase 6 artifact paths and terminal run status.
-type RenderResponse struct {
-	RunStatus          string   `json:"run_status"`
-	IncompleteReason   string   `json:"incomplete_reason,omitempty"`
-	ReportPath         string   `json:"report_path"`
-	FindingsDetailPath string   `json:"findings_detail_path"`
-	NeedsValidationPath string  `json:"needs_validation_path"`
-	SarifPath          string   `json:"sarif_path"`
-	ConfirmedCount     int      `json:"confirmed_count"`
-	NeedsValCount      int      `json:"needs_validation_count"`
-	RejectedCount      int      `json:"rejected_count"`
-	HardeningCount     int      `json:"hardening_count"`
-	UnvalidatedFPs     []string `json:"unvalidated_fingerprints"`
-}
-
-// Render enforces the Phase 5/6 terminal gates and deterministically generates
-// REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, and findings.sarif.
-func Render(req RenderRequest) (*RenderResponse, error) {
-	valRes, err := ValidateRun(req.OutputDir)
-	if err != nil {
-		return nil, err
-	}
-	if valid, _ := valRes["valid"].(bool); !valid {
-		return nil, fmt.Errorf("cannot render Phase 6 reports while validators fail: %v", valRes)
-	}
-
-	meta, err := loadMetadata(req.OutputDir)
-	if err != nil {
-		return nil, err
-	}
-	state, err := loadState(req.OutputDir)
-	if err != nil {
-		return nil, err
-	}
-	units, err := loadLedger(req.OutputDir)
-	if err != nil {
-		return nil, err
-	}
-	findings, err := loadFindings(req.OutputDir)
-	if err != nil {
-		return nil, err
-	}
-
-	if req.IncompleteReason != "" {
-		meta.RunStatus = "incomplete"
-		meta.IncompleteReason = req.IncompleteReason
-	}
-
-	var unvalidatedFPs []string
-	var unverifiedPhase5FPs []string
-	for fp, env := range state.Candidates {
-		if env.FinalRecord == nil {
-			unvalidatedFPs = append(unvalidatedFPs, fp)
-		} else if !env.Phase5Verified || env.NeedsFreshVerify {
-			unverifiedPhase5FPs = append(unverifiedPhase5FPs, fp)
-		}
-	}
-	sort.Strings(unvalidatedFPs)
-	sort.Strings(unverifiedPhase5FPs)
-
-	if (len(unvalidatedFPs) > 0 || len(unverifiedPhase5FPs) > 0) && meta.RunStatus != "incomplete" {
-		return nil, fmt.Errorf("cannot mark run complete: unvalidated candidates=%v, unverified Phase 5 records=%v (pass incomplete_reason if budget exhausted)", unvalidatedFPs, unverifiedPhase5FPs)
-	}
-
-	var confirmed, needsVal, rejected []validator.Finding
-	for _, f := range findings {
-		// Only include records that passed Phase 5 verification
-		env, exists := state.Candidates[f.Fingerprint]
-		if exists && (!env.Phase5Verified || env.NeedsFreshVerify) {
-			continue
-		}
-		switch f.Verdict {
-		case "confirmed":
-			confirmed = append(confirmed, f)
-		case "needs_validation":
-			needsVal = append(needsVal, f)
-		case "rejected":
-			rejected = append(rejected, f)
-		}
-	}
-
-	statusCounts := map[string]int{}
-	for _, u := range units {
-		statusCounts[u.Status]++
-	}
-	if statusCounts["planned"] > 0 || statusCounts["in_progress"] > 0 {
-		if meta.RunStatus != "incomplete" {
-			return nil, fmt.Errorf("cannot render complete report while %d planned and %d in_progress units remain", statusCounts["planned"], statusCounts["in_progress"])
-		}
-	} else if meta.RunStatus != "incomplete" {
-		meta.RunStatus = "complete"
-	}
-
-	if err := saveMetadata(req.OutputDir, meta); err != nil {
-		return nil, err
-	}
-
-	reportMD := buildReportMD(meta, state, units, statusCounts, confirmed, needsVal, rejected, unvalidatedFPs, unverifiedPhase5FPs)
-	detailMD := buildFindingsDetailMD(meta, confirmed)
-	needsValMD := buildNeedsValidationMD(meta, needsVal)
-	sarifBytes, err := buildSARIF(meta, confirmed)
-	if err != nil {
-		return nil, err
-	}
-
-	reportPath := filepath.Join(req.OutputDir, "REPORT.md")
-	detailPath := filepath.Join(req.OutputDir, "FINDINGS-DETAIL.md")
-	needsValPath := filepath.Join(req.OutputDir, "NEEDS-VALIDATION.md")
-	sarifPath := filepath.Join(req.OutputDir, "findings.sarif")
-
-	if err := os.WriteFile(reportPath, []byte(reportMD), 0o600); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(detailPath, []byte(detailMD), 0o600); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(needsValPath, []byte(needsValMD), 0o600); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(sarifPath, sarifBytes, 0o600); err != nil {
-		return nil, err
-	}
-
-	if unvalidatedFPs == nil {
-		unvalidatedFPs = []string{}
-	}
-	return &RenderResponse{
-		RunStatus:           meta.RunStatus,
-		IncompleteReason:    meta.IncompleteReason,
-		ReportPath:          reportPath,
-		FindingsDetailPath:  detailPath,
-		NeedsValidationPath: needsValPath,
-		SarifPath:           sarifPath,
-		ConfirmedCount:      len(confirmed),
-		NeedsValCount:       len(needsVal),
-		RejectedCount:       len(rejected),
-		HardeningCount:      len(state.HardeningNotes),
-		UnvalidatedFPs:      unvalidatedFPs,
-	}, nil
-}
-
-func buildReportMD(meta *RunMetadata, state *InternalState, units []validator.CoverageUnit, counts map[string]int, confirmed, needsVal, rejected []validator.Finding, unvalidatedFPs, unverifiedP5 []string) string {
+// BuildReportMD generates the 7-section deterministic REPORT.md defined by VALIDATION-AND-REPORTING.md.
+func BuildReportMD(meta *store.RunMetadata, state *store.InternalState, units []validator.CoverageUnit, counts map[string]int, confirmed, needsVal, rejected []validator.Finding, unvalidatedFPs, unverifiedP5 []string) string {
 	var b strings.Builder
 	b.WriteString("# Security Audit Report\n\n")
 
@@ -289,7 +140,8 @@ func buildReportMD(meta *RunMetadata, state *InternalState, units []validator.Co
 	return b.String()
 }
 
-func buildFindingsDetailMD(meta *RunMetadata, confirmed []validator.Finding) string {
+// BuildFindingsDetailMD generates FINDINGS-DETAIL.md for confirmed medium, high, and critical findings.
+func BuildFindingsDetailMD(confirmed []validator.Finding) string {
 	var b strings.Builder
 	b.WriteString("# Findings Detail (Confirmed Medium, High, and Critical)\n\n")
 	count := 0
@@ -342,7 +194,8 @@ func buildFindingsDetailMD(meta *RunMetadata, confirmed []validator.Finding) str
 	return b.String()
 }
 
-func buildNeedsValidationMD(meta *RunMetadata, needsVal []validator.Finding) string {
+// BuildNeedsValidationMD generates NEEDS-VALIDATION.md for unresolved blocked leads without severity.
+func BuildNeedsValidationMD(needsVal []validator.Finding) string {
 	var b strings.Builder
 	b.WriteString("# Needs Validation Leads\n\n")
 	b.WriteString("> These records represent source-grounded hypotheses blocked by a missing local capability or unobserved deployment fact. They carry **no severity**.\n\n")
@@ -378,62 +231,6 @@ func buildNeedsValidationMD(meta *RunMetadata, needsVal []validator.Finding) str
 		b.WriteString("\n")
 	}
 	return b.String()
-}
-
-func buildSARIF(meta *RunMetadata, confirmed []validator.Finding) ([]byte, error) {
-	rules := make([]map[string]any, 0, len(confirmed))
-	results := make([]map[string]any, 0, len(confirmed))
-
-	for _, f := range confirmed {
-		level := "warning"
-		if f.Severity.OverallSeverity == "high" || f.Severity.OverallSeverity == "critical" {
-			level = "error"
-		} else if f.Severity.OverallSeverity == "low" || f.Severity.OverallSeverity == "informational" {
-			level = "note"
-		}
-		sink := f.Trace[len(f.Trace)-1]
-		rules = append(rules, map[string]any{
-			"id":               f.Fingerprint,
-			"shortDescription": map[string]any{"text": f.Title},
-			"fullDescription":  map[string]any{"text": f.Description},
-			"help":             map[string]any{"text": f.Remediation.Strategy},
-		})
-		results = append(results, map[string]any{
-			"ruleId":  f.Fingerprint,
-			"level":   level,
-			"message": map[string]any{"text": f.RootCause + " — Observed: " + f.Execution.ObservedResult},
-			"locations": []map[string]any{
-				{
-					"physicalLocation": map[string]any{
-						"artifactLocation": map[string]any{"uri": sink.File},
-						"region":           map[string]any{"startLine": sink.Line},
-					},
-				},
-			},
-		})
-	}
-
-	sarifDoc := map[string]any{
-		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-		"version": "2.1.0",
-		"runs": []map[string]any{
-			{
-				"tool": map[string]any{
-					"driver": map[string]any{
-						"name":           "sec-audit",
-						"informationUri": "https://github.com/fabriziosalmi/security-audit-cli",
-						"rules":          rules,
-					},
-				},
-				"results": results,
-			},
-		},
-	}
-	out, err := json.MarshalIndent(sarifDoc, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(out, '\n'), nil
 }
 
 func escapeTable(s string) string {

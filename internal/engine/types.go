@@ -1,103 +1,22 @@
 package engine
 
 import (
+	"github.com/fabriziosalmi/security-audit-cli/internal/scanner"
+	"github.com/fabriziosalmi/security-audit-cli/internal/store"
 	"github.com/fabriziosalmi/security-audit-cli/internal/validator"
 )
 
-// RunMetadata matches the run-metadata.json contract from SKILL.md.
-type RunMetadata struct {
-	RunID                  string            `json:"run_id"`
-	Repo                   string            `json:"repo"`
-	Target                 string            `json:"target"`
-	SourceRef              string            `json:"source_ref"`
-	DirtyWorktree          bool              `json:"dirty_worktree"`
-	Profile                string            `json:"profile"` // "quick" | "standard" | "deep"
-	ScopePaths             []string          `json:"scope_paths"`
-	Budget                 *int              `json:"budget"`
-	AgentsSpent            int               `json:"agents_spent"`
-	ExecutionPolicy        string            `json:"execution_policy"`
-	SelectedCompanionFiles []string          `json:"selected_companion_files"`
-	PriorRunPaths          []string          `json:"prior_run_paths"`
-	SharedFileOwners       map[string]string `json:"shared_file_owners"`
-	RunStatus              string            `json:"run_status"` // "in_progress" | "complete" | "incomplete"
-	IncompleteReason       string            `json:"incomplete_reason,omitempty"`
-}
-
-// CandidateEnvelope tracks a candidate's lifecycle and adversarial provenance across Phases 2, 3, 4, and 5.
-type CandidateEnvelope struct {
-	Fingerprint       string            `json:"fingerprint"`
-	HunterID          string            `json:"hunter_id"`
-	ProposedVerdict   string            `json:"proposed_verdict"` // "confirmed" | "needs_validation"
-	CandidateRecord   validator.Finding `json:"candidate_record"`
-	CandidateRaw      map[string]any    `json:"candidate_raw"`
-	LinkedUnits       []string          `json:"linked_units"`
-	Phase3VerifierID  string            `json:"phase3_verifier_id,omitempty"`
-	Phase3Decision    string            `json:"phase3_decision,omitempty"` // "confirmed" | "needs_validation" | "rejected"
-	FinalRecord       *validator.Finding `json:"final_record,omitempty"`
-	FinalRaw          map[string]any    `json:"final_raw,omitempty"`
-	Phase5VerifierIDs []string          `json:"phase5_verifier_ids,omitempty"`
-	Phase5Verified    bool              `json:"phase5_verified"`
-	NeedsFreshVerify  bool              `json:"needs_fresh_verify"`
-}
-
-// AgentAssignment records an allocated agent invocation and its role/ownership.
-type AgentAssignment struct {
-	AgentID     string   `json:"agent_id"`
-	Role        string   `json:"role"` // "recon" | "hunter" | "critic" | "verifier" | "record_verifier"
-	Wave        int      `json:"wave"`
-	CoverageIDs []string `json:"coverage_ids,omitempty"`
-	Fingerprint string   `json:"fingerprint,omitempty"`
-	Completed   bool     `json:"completed"`
-}
-
-// PriorCarryover summarizes how prior-run records and units map onto the current source.
-type PriorCarryover struct {
-	PriorRunDir             string   `json:"prior_run_dir"`
-	CarriedConfirmed        []string `json:"carried_confirmed_fingerprints"`
-	ChangedConfirmed        []string `json:"changed_confirmed_fingerprints"`
-	CarriedNeedsValidation  []string `json:"carried_needs_validation_fingerprints"`
-	SuppressedRejected      []string `json:"suppressed_rejected_fingerprints"`
-}
-
-// InternalState persists parent-side orchestration state in <output-dir>/.sec-audit-state.json.
-type InternalState struct {
-	CurrentWave        int                          `json:"current_wave"`
-	PostWaveCriticDone bool                         `json:"post_wave_critic_done"`
-	FinalCleanDone     bool                         `json:"final_clean_done"`
-	Agents             map[string]*AgentAssignment  `json:"agents"`
-	Candidates         map[string]*CandidateEnvelope `json:"candidates"`
-	HardeningNotes     []string                     `json:"hardening_notes"`
-	UncoveredQueue     []UncoveredEntry             `json:"uncovered_queue"`
-	PriorCarryovers    []PriorCarryover             `json:"prior_carryovers"`
-}
-
-// UncoveredEntry represents a newly discovered boundary reported by a hunter or critic.
-type UncoveredEntry struct {
-	Surface       string   `json:"surface"`
-	Boundary      string   `json:"boundary"`
-	Subsystem     string   `json:"subsystem"`
-	AttackClass   string   `json:"attack_class"`
-	StartingPaths []string `json:"starting_paths"`
-	Reason        string   `json:"reason"`
-}
-
-// CompanionRecommendation links a companion file to source-grounded files that triggered it.
-type CompanionRecommendation struct {
-	File     string   `json:"file"`
-	Reason   string   `json:"reason"`
-	Evidence []string `json:"evidence_paths"`
-}
-
-// RepoBrief is the deterministic static reconnaissance output returned by Init.
-type RepoBrief struct {
-	TotalFiles              int                       `json:"total_files"`
-	Languages               map[string]int            `json:"languages"`
-	Manifests               []string                  `json:"manifests"`
-	EntrypointCandidates    []string                  `json:"entrypoint_candidates"`
-	AuthBoundaryCandidates  []string                  `json:"auth_boundary_candidates"`
-	RecommendedCompanions   []CompanionRecommendation `json:"recommended_companions"`
-	SuggestedSeedSubsystems []string                  `json:"suggested_seed_subsystems"`
-}
+// Re-export core domain types from store and scanner for clean caller ergonomics.
+type (
+	RunMetadata             = store.RunMetadata
+	CandidateEnvelope       = store.CandidateEnvelope
+	AgentAssignment         = store.AgentAssignment
+	PriorCarryover          = store.PriorCarryover
+	InternalState           = store.InternalState
+	UncoveredEntry          = store.UncoveredEntry
+	CompanionRecommendation = scanner.CompanionRecommendation
+	RepoBrief               = scanner.RepoBrief
+)
 
 // InitRequest is the input for sec-audit init / sec_audit_init.
 type InitRequest struct {
@@ -111,10 +30,22 @@ type InitRequest struct {
 
 // InitResponse is the output for sec-audit init / sec_audit_init.
 type InitResponse struct {
-	OutputDir       string          `json:"output_dir"`
-	Metadata        RunMetadata     `json:"metadata"`
-	RepoBrief       RepoBrief       `json:"repo_brief"`
+	OutputDir       string           `json:"output_dir"`
+	Metadata        RunMetadata      `json:"metadata"`
+	RepoBrief       RepoBrief        `json:"repo_brief"`
 	PriorCarryovers []PriorCarryover `json:"prior_carryovers,omitempty"`
+}
+
+// CatalogRequest is the input for sec-audit catalog / sec_audit_catalog.
+type CatalogRequest struct {
+	File  string `json:"file,omitempty"`
+	Block string `json:"block,omitempty"`
+}
+
+// ArchitectureRequest is the input for sec-audit architecture / sec_audit_architecture.
+type ArchitectureRequest struct {
+	OutputDir string `json:"output_dir"`
+	Content   string `json:"content"`
 }
 
 // SeedUnitInput is a single unit specification for ledger_seed (coverage_id is derived automatically).
@@ -130,4 +61,143 @@ type SeedUnitInput struct {
 	SelectedCompanionBlocks  []string                  `json:"selected_companion_blocks"`
 	ExcludedBlocks           []validator.ExcludedBlock `json:"excluded_blocks"`
 	PriorStatus              string                    `json:"prior_status,omitempty"`
+}
+
+// SeedLedgerRequest is the input for sec-audit ledger-seed / sec_audit_ledger_seed.
+type SeedLedgerRequest struct {
+	OutputDir string          `json:"output_dir"`
+	Units     []SeedUnitInput `json:"units"`
+}
+
+// AssignAgentRequest is the input for sec-audit agent-assign / sec_audit_agent_assign.
+type AssignAgentRequest struct {
+	OutputDir   string   `json:"output_dir"`
+	Role        string   `json:"role"` // "recon" | "hunter" | "critic" | "verifier" | "record_verifier"
+	AgentID     string   `json:"agent_id"`
+	CoverageIDs []string `json:"coverage_ids,omitempty"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+}
+
+// AssignAgentResponse returns the isolated workspace paths and compiled prompt.
+type AssignAgentResponse struct {
+	AgentID      string   `json:"agent_id"`
+	Role         string   `json:"role"`
+	ScratchDir   string   `json:"scratch_dir"`
+	ArtifactsDir string   `json:"artifacts_dir"`
+	DeferredIDs  []string `json:"deferred_ids,omitempty"`
+	Prompt       string   `json:"prompt"`
+}
+
+// PromoteArtifactsRequest is the input for sec-audit artifact-promote / sec_audit_artifact_promote.
+type PromoteArtifactsRequest struct {
+	OutputDir     string   `json:"output_dir"`
+	AgentID       string   `json:"agent_id"`
+	Files         []string `json:"files"`
+	MaxFileBytes  int64    `json:"max_file_bytes,omitempty"`
+	MaxTotalBytes int64    `json:"max_total_bytes,omitempty"`
+}
+
+// HunterUnitResult matches one entry in the hunter's structured result `units` array.
+type HunterUnitResult struct {
+	CoverageID            string                 `json:"coverage_id"`
+	Disposition           string                 `json:"disposition"` // "covered" | "candidate" | "blocked"
+	ReviewedPaths         []string               `json:"reviewed_paths"`
+	Checks                []validator.LocalCheck `json:"checks"`
+	CandidateFingerprints []string               `json:"candidate_fingerprints"`
+	Unresolved            []string               `json:"unresolved"`
+}
+
+// HunterStructuredResult matches the JSON returned by a Phase 2 hunter.
+type HunterStructuredResult struct {
+	Units      []HunterUnitResult `json:"units"`
+	Candidates []map[string]any   `json:"candidates"`
+	Hardening  []string           `json:"hardening"`
+	Uncovered  []UncoveredEntry   `json:"uncovered"`
+}
+
+// SubmitHunterRequest is the input for sec-audit hunter-submit / sec_audit_hunter_submit.
+type SubmitHunterRequest struct {
+	OutputDir string                 `json:"output_dir"`
+	AgentID   string                 `json:"agent_id"`
+	Result    HunterStructuredResult `json:"result"`
+}
+
+// CriticMissingUnit describes a coverage gap discovered by a coverage critic.
+type CriticMissingUnit struct {
+	CanonicalRefs            *validator.CanonicalRefs  `json:"canonical_refs,omitempty"`
+	Surface                  string                    `json:"surface"`
+	Boundary                 string                    `json:"boundary"`
+	Subsystem                string                    `json:"subsystem"`
+	AttackClass              string                    `json:"attack_class"`
+	StartingPaths            []string                  `json:"starting_paths"`
+	OrdinaryAttackClassBlock *string                   `json:"ordinary_attack_class_block,omitempty"`
+	SelectedCompanionBlocks  []string                  `json:"selected_companion_blocks"`
+	ExcludedBlocks           []validator.ExcludedBlock `json:"excluded_blocks"`
+	Reason                   string                    `json:"reason"`
+}
+
+// CriticResult matches the JSON returned by a Phase 2 coverage critic.
+type CriticResult struct {
+	MissingUnits       []CriticMissingUnit `json:"missing_units"`
+	ReassignIDs        []string            `json:"reassign_ids"`
+	ReassignmentReason string              `json:"reassignment_reason,omitempty"`
+	ResolvedPriorLeads []string            `json:"resolved_prior_leads"`
+	Stop               bool                `json:"stop"`
+}
+
+// SubmitCriticRequest is the input for sec-audit critic-submit / sec_audit_critic_submit.
+type SubmitCriticRequest struct {
+	OutputDir  string       `json:"output_dir"`
+	AgentID    string       `json:"agent_id"`
+	CriticKind string       `json:"critic_kind,omitempty"`
+	Result     CriticResult `json:"result"`
+}
+
+// VerifierSubmitRequest is the input for sec-audit verifier-submit / sec_audit_verifier_submit.
+type VerifierSubmitRequest struct {
+	OutputDir   string                `json:"output_dir"`
+	AgentID     string                `json:"agent_id"`
+	Fingerprint string                `json:"fingerprint"`
+	Decision    string                `json:"decision"` // "confirmed" | "needs_validation" | "rejected"
+	Record      map[string]any        `json:"record"`
+	Check       *validator.LocalCheck `json:"check,omitempty"`
+}
+
+// RecordVerifySubmitRequest is the input for sec-audit record-verify-submit / sec_audit_record_verify_submit.
+type RecordVerifySubmitRequest struct {
+	OutputDir   string         `json:"output_dir"`
+	AgentID     string         `json:"agent_id"`
+	Fingerprint string         `json:"fingerprint"`
+	Decision    string         `json:"decision"` // "verified" | "replace"
+	Reason      string         `json:"reason,omitempty"`
+	Record      map[string]any `json:"record,omitempty"`
+}
+
+// ValidateRequest is the input for sec-audit validate / sec_audit_validate.
+type ValidateRequest struct {
+	OutputDir    string `json:"output_dir,omitempty"`
+	LedgerPath   string `json:"ledger_path,omitempty"`
+	FindingsPath string `json:"findings_path,omitempty"`
+	TargetPath   string `json:"target_path,omitempty"`
+}
+
+// RenderRequest is the input for sec-audit render / sec_audit_render.
+type RenderRequest struct {
+	OutputDir        string `json:"output_dir"`
+	IncompleteReason string `json:"incomplete_reason,omitempty"`
+}
+
+// RenderResponse lists the generated Phase 6 artifact paths and terminal run status.
+type RenderResponse struct {
+	RunStatus           string   `json:"run_status"`
+	IncompleteReason    string   `json:"incomplete_reason,omitempty"`
+	ReportPath          string   `json:"report_path"`
+	FindingsDetailPath  string   `json:"findings_detail_path"`
+	NeedsValidationPath string   `json:"needs_validation_path"`
+	SarifPath           string   `json:"sarif_path"`
+	ConfirmedCount      int      `json:"confirmed_count"`
+	NeedsValCount       int      `json:"needs_validation_count"`
+	RejectedCount       int      `json:"rejected_count"`
+	HardeningCount      int      `json:"hardening_count"`
+	UnvalidatedFPs      []string `json:"unvalidated_fingerprints"`
 }

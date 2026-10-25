@@ -331,6 +331,15 @@ func (c *Catalog) SchemaBranches(includeRejected bool) (string, error) {
 	return string(out), nil
 }
 
+// ValidBlockMap returns a set of all valid canonical block references in the catalog.
+func (c *Catalog) ValidBlockMap() map[string]bool {
+	m := make(map[string]bool, len(c.Blocks))
+	for k := range c.Blocks {
+		m[k] = true
+	}
+	return m
+}
+
 // ExpandCompanionBlocks takes a list of companion class blocks and ensures their file's
 // Core discipline, Universal moves, and Validation rules blocks are included in canonical order.
 func (c *Catalog) ExpandCompanionBlocks(selected []string) []string {

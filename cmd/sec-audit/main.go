@@ -9,77 +9,65 @@ import (
 	"strings"
 
 	"github.com/fabriziosalmi/security-audit-cli/internal/mcp"
+	"github.com/fabriziosalmi/security-audit-cli/internal/registry"
 )
 
-var subcommandToTool = map[string]string{
-	"init":                 "sec_audit_init",
-	"catalog":              "sec_audit_catalog",
-	"architecture":         "sec_audit_architecture",
-	"ledger-seed":          "sec_audit_ledger_seed",
-	"agent-assign":         "sec_audit_agent_assign",
-	"artifact-promote":     "sec_audit_artifact_promote",
-	"hunter-submit":        "sec_audit_hunter_submit",
-	"critic-submit":        "sec_audit_critic_submit",
-	"verifier-submit":      "sec_audit_verifier_submit",
-	"record-verify-submit": "sec_audit_record_verify_submit",
-	"validate":             "sec_audit_validate",
-	"render":               "sec_audit_render",
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) < 1 {
+		printUsage(stdout)
+		return 1
 	}
-	sub := os.Args[1]
+	sub := args[0]
 	if sub == "-h" || sub == "--help" || sub == "help" {
-		printUsage()
-		os.Exit(0)
+		printUsage(stdout)
+		return 0
 	}
 	if sub == "mcp" {
-		if err := mcp.ServeStdio(os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
-			os.Exit(1)
+		if err := mcp.ServeStdio(stdin, stdout); err != nil {
+			fmt.Fprintf(stderr, "mcp server error: %v\n", err)
+			return 1
 		}
-		return
+		return 0
 	}
 
-	toolName, ok := subcommandToTool[sub]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n\n", sub)
-		printUsage()
-		os.Exit(1)
+	if _, ok := registry.BySubcommand(sub); !ok {
+		fmt.Fprintf(stderr, "unknown subcommand %q\n\n", sub)
+		printUsage(stderr)
+		return 1
 	}
 
-	rawArgs, err := parseSubcommandFlags(sub, os.Args[2:])
+	rawArgs, err := parseSubcommandFlags(sub, args[1:], stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
 	}
 
-	res, err := mcp.DispatchTool(toolName, rawArgs)
+	res, err := registry.DispatchSubcommand(sub, rawArgs)
 	if err != nil {
 		errOut, _ := json.MarshalIndent(map[string]any{"error": err.Error()}, "", "  ")
-		fmt.Fprintln(os.Stderr, string(errOut))
-		os.Exit(1)
+		fmt.Fprintln(stderr, string(errOut))
+		return 1
 	}
 
 	out, _ := json.MarshalIndent(res, "", "  ")
-	fmt.Println(string(out))
-	// Exit 1 if validate returned valid: false
+	fmt.Fprintln(stdout, string(out))
 	if m, isMap := res.(map[string]any); isMap {
 		if v, hasValid := m["valid"].(bool); hasValid && !v {
-			os.Exit(1)
+			return 1
 		}
 	}
+	return 0
 }
 
-func parseSubcommandFlags(sub string, args []string) (json.RawMessage, error) {
+func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawMessage, error) {
 	fs := flag.NewFlagSet(sub, flag.ContinueOnError)
 	jsonInput := fs.String("json", "", "Raw JSON input object (or '-' to read from stdin)")
 	inputFile := fs.String("input", "", "Path to JSON input file")
 
-	// Common convenience flags across subcommands
 	target := fs.String("target", "", "Target repository path")
 	outputDir := fs.String("output-dir", "", "Audit run output directory")
 	profile := fs.String("profile", "", "Audit profile (quick, standard, deep)")
@@ -107,7 +95,7 @@ func parseSubcommandFlags(sub string, args []string) (json.RawMessage, error) {
 
 	if *jsonInput != "" {
 		if *jsonInput == "-" {
-			b, err := io.ReadAll(os.Stdin)
+			b, err := io.ReadAll(stdin)
 			return json.RawMessage(b), err
 		}
 		return json.RawMessage(*jsonInput), nil
@@ -119,7 +107,6 @@ func parseSubcommandFlags(sub string, args []string) (json.RawMessage, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read --input %q: %w", *inputFile, err)
 		}
-		// For ledger-seed, if input file is a JSON array, wrap it in {"units": ...}
 		trimmed := strings.TrimSpace(string(b))
 		if sub == "ledger-seed" && strings.HasPrefix(trimmed, "[") {
 			var arr []any
@@ -215,25 +202,14 @@ func parseSubcommandFlags(sub string, args []string) (json.RawMessage, error) {
 	return json.RawMessage(b), err
 }
 
-func printUsage() {
-	fmt.Println(`sec-audit — Deterministic 6-Phase Security Audit CLI & MCP Server (1:1 parity)
-
-Usage:
-  sec-audit <subcommand> [flags]
-  sec-audit mcp
-
-Subcommands (1:1 with MCP tools sec_audit_<subcommand>):
-  init                  Phase 1 setup, budget gate, static repo brief, prior-run carryover
-  catalog               Inspect embedded attack-class & companion playbooks and blocks
-  architecture          Validate word cap (~1,000 words) and write architecture.md
-  ledger-seed           Derive canonical RFC 3986 coverage_ids, verify paths/blocks, seed ledger
-  agent-assign          Enforce adversarial isolation & budget reserves, create scratch/artifacts, compile prompt
-  artifact-promote      Execute 11-step OS race-safe O_NOFOLLOW promotion from scratch/ to artifacts/
-  hunter-submit         Verify source file:line citations on disk and update coverage-ledger.json
-  critic-submit         Archive reopened attempts, add missing units, advance hunting wave
-  verifier-submit       Enforce verifier != hunter, verify source trace on disk, update findings.json
-  record-verify-submit  Enforce 3-way adversarial independence & material-replacement gate (Phase 5)
-  validate              Validate coverage-ledger.json, findings.json, and source paths on disk
-  render                Deterministically generate REPORT.md, FINDINGS-DETAIL.md, NEEDS-VALIDATION.md, findings.sarif
-  mcp                   Run JSON-RPC 2.0 MCP server over stdio`)
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "sec-audit — Deterministic 6-Phase Security Audit CLI & MCP Server (1:1 parity)")
+	fmt.Fprintln(w, "\nUsage:")
+	fmt.Fprintln(w, "  sec-audit <subcommand> [flags]")
+	fmt.Fprintln(w, "  sec-audit mcp")
+	fmt.Fprintln(w, "\nSubcommands (1:1 with MCP tools sec_audit_<subcommand>):")
+	for _, c := range registry.All() {
+		fmt.Fprintf(w, "  %-21s %s\n", c.Subcommand, c.Summary)
+	}
+	fmt.Fprintf(w, "  %-21s %s\n", "mcp", "Run JSON-RPC 2.0 MCP server over stdio")
 }
