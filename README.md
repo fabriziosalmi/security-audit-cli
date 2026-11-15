@@ -309,7 +309,7 @@ Every completed audit run in `<output-dir>` produces canonical artifacts verifie
 | `FINDINGS-DETAIL.md` | Full source trace (`entrypoint -> propagation* -> sink`), evidence citations, preconditions, reproduction instructions, and code fixes. |
 | `NEEDS-VALIDATION.md` | Unresolved leads requiring external environment or deployment validation, including validation plans and blockers. |
 | `findings.sarif` | SARIF 2.1.0 report mapping confirmed findings and source locations for GitHub Code Scanning and static analysis pipelines. |
-| `advisories/GHSA-<fingerprint>.md` | Standalone Coordinated Disclosure / GitHub Security Advisory Markdown documents generated for each confirmed finding. |
+| `advisories/GHSA-<fingerprint>.md` | Standalone Coordinated Disclosure / GitHub Security Advisory Markdown documents generated for each confirmed finding. A fingerprint with characters outside `[A-Za-z0-9._-]` (for example `/` or `:`) is written as one file named with `_` in their place plus the first 8 hex digits of its SHA-256, so an advisory never leaves `advisories/`. |
 | `manifest.sha256` | Standard `sha256sum -c` / `shasum -a 256 -c` manifest of all canonical artifacts and advisories above. |
 
 ---

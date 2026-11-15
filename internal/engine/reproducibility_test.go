@@ -137,6 +137,10 @@ func TestBitForBitReproducibility(t *testing.T) {
 }
 
 func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
+	// a fingerprint with path separators and dot segments, as the
+	// fingerprint pattern allows: its advisory must stay a file directly
+	// inside advisories/
+	const confFP = "lmget/../../FIND-CONF"
 	target := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(target, "src"), 0o755)
 	_ = os.WriteFile(filepath.Join(target, "src", "api.go"), []byte("package src\nfunc Handle() {}\nfunc Sink() {}\n"), 0o644)
@@ -188,7 +192,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 
 	candConf := map[string]any{
 		"proposed_verdict":  "confirmed",
-		"fingerprint":       "FIND-CONF",
+		"fingerprint":       confFP,
 		"title":             "Confirmed Injection",
 		"description":       "Desc",
 		"root_cause":        "Unescaped input",
@@ -237,7 +241,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 						Invariant: "inv", Method: "local", Result: "ok", Artifact: &artRel,
 					},
 				},
-				CandidateFingerprints: []string{"FIND-CONF", "FIND-NV"},
+				CandidateFingerprints: []string{confFP, "FIND-NV"},
 			},
 		},
 		Candidates: []map[string]any{candConf, candNV},
@@ -247,7 +251,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 
 	// 2. Break-test: Phase 3 Verifier assigned to FIND-CONF cannot submit decision for FIND-NV
 	if _, err := engine.AssignAgent(engine.AssignAgentRequest{
-		OutputDir: outDir, Role: "verifier", AgentID: "ver-conf", Fingerprint: "FIND-CONF",
+		OutputDir: outDir, Role: "verifier", AgentID: "ver-conf", Fingerprint: confFP,
 	}); err != nil {
 		t.Fatalf("AssignAgent ver-conf: %v", err)
 	}
@@ -273,7 +277,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 	}
 	confRec["verdict"] = "confirmed"
 	if _, err := engine.SubmitVerifier(engine.VerifierSubmitRequest{
-		OutputDir: outDir, AgentID: "ver-conf", Fingerprint: "FIND-CONF", Decision: "confirmed", Record: confRec,
+		OutputDir: outDir, AgentID: "ver-conf", Fingerprint: confFP, Decision: "confirmed", Record: confRec,
 	}); err != nil {
 		t.Fatalf("SubmitVerifier FIND-CONF: %v", err)
 	}
@@ -296,7 +300,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 	}
 	// Break-test: rec-nv-1 assigned to FIND-NV cannot verify FIND-CONF
 	if _, err := engine.SubmitRecordVerifier(engine.RecordVerifySubmitRequest{
-		OutputDir: outDir, AgentID: "rec-nv-1", Fingerprint: "FIND-CONF", Decision: "verified",
+		OutputDir: outDir, AgentID: "rec-nv-1", Fingerprint: confFP, Decision: "verified",
 	}); err == nil {
 		t.Fatalf("expected record_verifier assigned to FIND-NV to be rejected on FIND-CONF")
 	}
@@ -323,7 +327,7 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 		t.Fatalf("expected reusing rec-nv-1 to fail")
 	}
 	// Fresh rec-nv-2 verifies FIND-NV, and rec-conf-1 verifies FIND-CONF
-	for _, pair := range [][2]string{{"rec-nv-2", "FIND-NV"}, {"rec-conf-1", "FIND-CONF"}} {
+	for _, pair := range [][2]string{{"rec-nv-2", "FIND-NV"}, {"rec-conf-1", confFP}} {
 		if _, err := engine.AssignAgent(engine.AssignAgentRequest{
 			OutputDir: outDir, Role: "record_verifier", AgentID: pair[0], Fingerprint: pair[1],
 		}); err != nil {
@@ -347,6 +351,11 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 	}
 	if rRes.GatePassed {
 		t.Fatalf("expected FailOn=high to set GatePassed=false when 2 high findings exist")
+	}
+	for _, p := range rRes.AdvisoryPaths {
+		if filepath.Dir(p) != filepath.Join(outDir, "advisories") {
+			t.Fatalf("advisory %s is not directly inside %s", p, filepath.Join(outDir, "advisories"))
+		}
 	}
 	manifestBytes, err := os.ReadFile(rRes.ManifestPath)
 	if err != nil {

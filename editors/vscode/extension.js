@@ -5,6 +5,18 @@ const cp = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
+
+// advisoryFileName mirrors internal/engine advisoryFileName: the file the
+// render step writes for a fingerprint, always one name inside advisories/.
+function advisoryFileName(fp) {
+  const safe = fp.replace(/[^A-Za-z0-9._-]/g, "_");
+  let name = "GHSA-" + safe;
+  if (safe !== fp) {
+    name += "-" + crypto.createHash("sha256").update(fp, "utf8").digest("hex").slice(0, 8);
+  }
+  return name + ".md";
+}
 
 /**
  * Resolves the sec-audit binary path from configuration, PATH, or ~/.local/bin/sec-audit.
@@ -353,12 +365,12 @@ function activate(context) {
             new AuditNode(`Source Trace (${traceNodes.length})`, vscode.TreeItemCollapsibleState.Expanded, traceNodes, undefined, "", "", new vscode.ThemeIcon("debug-step-into")),
             new AuditNode(`Evidence (${evNodes.length})`, vscode.TreeItemCollapsibleState.Collapsed, evNodes, undefined, "", "", new vscode.ThemeIcon("references"))
           ];
-          const safeFP = typeof f.fingerprint === "string" && /^[A-Za-z0-9._:-]{3,80}$/.test(f.fingerprint) ? f.fingerprint : "";
-          const advFile = safeFP ? resolveContainedPath(activeOutputDir, path.join("advisories", `GHSA-${safeFP}.md`)) : "";
+          const advName = typeof f.fingerprint === "string" && f.fingerprint ? advisoryFileName(f.fingerprint) : "";
+          const advFile = advName ? resolveContainedPath(activeOutputDir, path.join("advisories", advName)) : "";
           if (advFile && fs.existsSync(advFile)) {
             detailChildren.push(
               new AuditNode(
-                `Open GHSA-${safeFP}.md`,
+                `Open ${advName}`,
                 vscode.TreeItemCollapsibleState.None,
                 [],
                 { command: "sec-audit.openLocation", title: "Open GHSA Advisory", arguments: [advFile, 1] },
