@@ -8,6 +8,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- **`render` writes every advisory inside `advisories/` (found while auditing lmget)**:
+  - The advisory path was `advisories/GHSA-<fingerprint>.md`, but the fingerprint pattern allows `/` and `.`. A fingerprint such as `lmget/oci-token` failed the render (`no such file or directory`), and one such as `x/../../name` made `render` write the advisory outside `advisories/`, or outside the output directory with more `../` segments. Fingerprints come from agent output.
+  - `advisoryFileName` now maps characters outside `[A-Za-z0-9._-]` to `_` and appends the first 8 hex digits of the fingerprint's SHA-256 when the name changed, so names stay unique. Plain fingerprints keep their name. `TestDraconianAdversarialMatrixAndManifestTamper` now uses `lmget/../../FIND-CONF` and checks that each advisory is directly inside `advisories/`; with the old path it fails.
+  - The VS Code extension computes the same name, so the advisory link also appears for fingerprints with `/` or `:`.
 - **Hunter prompt and `hunter-submit` now describe the same contract (found while auditing lmget)**:
   - The compiled hunter prompt showed assigned units in the ledger shape (`status`, `local_checks`, `result_fingerprints`) and never described the object `hunter-submit` accepts (`disposition`, `checks`, `candidate_fingerprints`), so hunters returned results that failed submission. The prompt now carries an explicit "Structured result" section and an example built from the assigned units; `TestHunterPromptExampleSubmitsAsIs` submits that example through `SubmitHunter` unchanged, so the two cannot drift apart again.
   - The prompt now states that candidates name their verdict field `proposed_verdict` (the schema branches it embeds say `verdict`), and a candidate that carries `verdict` instead gets that hint in the validation error.

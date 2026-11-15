@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -253,7 +255,7 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 			return nil, fmt.Errorf("create advisories dir: %w", err)
 		}
 		for _, f := range confirmed {
-			advRel := filepath.ToSlash(filepath.Join("advisories", "GHSA-"+f.Fingerprint+".md"))
+			advRel := "advisories/" + advisoryFileName(f.Fingerprint)
 			advAbs := filepath.Join(req.OutputDir, advRel)
 			advMD := report.BuildAdvisoryMD(meta, f)
 			if err := store.WriteFileAtomic(advAbs, []byte(advMD), 0o600); err != nil {
@@ -418,4 +420,25 @@ func Status(req StatusRequest) (*StatusResponse, error) {
 		ReadyToRender:         readyToRender,
 		NextRequiredActions:   actions,
 	}, nil
+}
+
+// advisoryFileName maps a fingerprint to one file name directly inside
+// advisories/. The fingerprint pattern allows '/', '.', ':', '@' and '+', so
+// it is never used as a path: every other byte becomes '_', and a name that
+// had to change gets a short hash of the fingerprint so two fingerprints
+// never share a file. Fingerprints of only [A-Za-z0-9._-] keep their name.
+func advisoryFileName(fp string) string {
+	safe := []byte(fp)
+	changed := false
+	for i, c := range safe {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-') {
+			safe[i], changed = '_', true
+		}
+	}
+	name := "GHSA-" + string(safe)
+	if changed {
+		sum := sha256.Sum256([]byte(fp))
+		name += "-" + hex.EncodeToString(sum[:4])
+	}
+	return name + ".md"
 }
