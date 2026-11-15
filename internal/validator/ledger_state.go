@@ -66,13 +66,13 @@ func validateChecks(checks []LocalCheck, location string, errs *[]string, target
 		}
 		validateStringArray(c.ReviewedPaths, base+".reviewed_paths", errs, false, false, true, targetDir)
 		if !IsVisibleText(c.Invariant, 0) {
-			addErr(fmt.Sprintf("%s.invariant: invalid text", base))
+			addErr(fmt.Sprintf("%s.invariant: invalid text: %s", base, TextProblem(c.Invariant, 0)))
 		}
 		if c.Method != "source" && c.Method != "local" {
 			addErr(fmt.Sprintf("%s.method: expected \"source\" or \"local\"", base))
 		}
 		if !IsVisibleText(c.Result, 0) {
-			addErr(fmt.Sprintf("%s.result: invalid text", base))
+			addErr(fmt.Sprintf("%s.result: invalid text: %s", base, TextProblem(c.Result, 0)))
 		}
 		if c.Method == "source" && c.Artifact != nil {
 			addErr(fmt.Sprintf("%s.artifact: source-only check must use null", base))
@@ -239,7 +239,7 @@ func validateAttempts(attempts []ArchivedAttempt, u CoverageUnit, base string, e
 		validateStringArray(att.ResultFingerprints, attBase+".result_fingerprints", errs, true, true, false, "")
 		validateStringArray(att.Unresolved, attBase+".unresolved", errs, true, false, false, "")
 		if !IsVisibleText(att.ReassignmentReason, 0) {
-			addErr(fmt.Sprintf("%s.reassignment_reason: invalid text", attBase))
+			addErr(fmt.Sprintf("%s.reassignment_reason: invalid text: %s", attBase, TextProblem(att.ReassignmentReason, 0)))
 		}
 		validateStateInvariants(
 			att.Status, att.AgentID, att.ReviewedPaths,

@@ -196,6 +196,13 @@ func ValidateSingleFinding(f Finding, rawItem map[string]any, base, targetDir st
 
 	for _, req := range required {
 		if _, ok := rawItem[req]; !ok {
+			if req == "proposed_verdict" {
+				if _, hasVerdict := rawItem["verdict"]; hasVerdict {
+					addErr(fmt.Sprintf("%s: missing required field %q "+
+						"(a hunter candidate names its verdict field proposed_verdict, not verdict)", base, req))
+					continue
+				}
+			}
 			addErr(fmt.Sprintf("%s: missing required field %q", base, req))
 		}
 	}

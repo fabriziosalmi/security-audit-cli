@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hunter prompt and `hunter-submit` now describe the same contract (found while auditing lmget)**:
+  - The compiled hunter prompt showed assigned units in the ledger shape (`status`, `local_checks`, `result_fingerprints`) and never described the object `hunter-submit` accepts (`disposition`, `checks`, `candidate_fingerprints`), so hunters returned results that failed submission. The prompt now carries an explicit "Structured result" section and an example built from the assigned units; `TestHunterPromptExampleSubmitsAsIs` submits that example through `SubmitHunter` unchanged, so the two cannot drift apart again.
+  - The prompt now states that candidates name their verdict field `proposed_verdict` (the schema branches it embeds say `verdict`), and a candidate that carries `verdict` instead gets that hint in the validation error.
+  - Hunter and verifier prompts state the rules the validator enforces but the JSON schema cannot express: the order of `trace` kinds (`entrypoint` first, `sink` last, `propagation` in between) and the text rules.
+  - `invalid text` validation errors now say why (`is empty`, `is N bytes, the limit is 4096`, `has leading or trailing whitespace`, `is not valid UTF-8`, `has no visible character`) through the new `validator.TextProblem`.
+
 ## [0.1.4] - 2026-10-25
 
 ### Fixed

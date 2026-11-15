@@ -87,6 +87,29 @@ func IsVisibleText(s string, maxLen int) bool {
 	return HasVisibleProse(s)
 }
 
+// TextProblem says why IsVisibleText(s, maxLen) is false, or "" when it is true.
+// Validation errors carry it, so an agent can fix its text instead of guessing.
+func TextProblem(s string, maxLen int) string {
+	if maxLen <= 0 {
+		maxLen = MaxTextLength
+	}
+	switch {
+	case len(s) == 0:
+		return "is empty"
+	case len(s) > maxLen:
+		return fmt.Sprintf("is %d bytes, the limit is %d", len(s), maxLen)
+	case !utf8.ValidString(s):
+		return "is not valid UTF-8"
+	case strings.ContainsRune(s, utf8.RuneError):
+		return "contains U+FFFD"
+	case strings.TrimSpace(s) != s:
+		return "has leading or trailing whitespace"
+	case !HasVisibleProse(s):
+		return "has no visible character"
+	}
+	return ""
+}
+
 func isLikelyNFC(s string) bool {
 	for _, r := range s {
 		// Reject all Unicode nonspacing and enclosing combining marks (Mn, Me) that indicate NFD/NFKD decomposed strings

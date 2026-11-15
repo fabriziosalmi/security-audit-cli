@@ -133,3 +133,13 @@ const CandidateGateBlock = `## Candidate gate
    It must match ` + "`^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$`" + ` and must not include a line,
    wave, agent, severity, or verdict.
 7. Return an empty candidate array when nothing survives these gates.`
+
+// FieldRulesBlock states the record rules the validator enforces and the
+// JSON schema cannot express. Hunter and verifier prompts both carry it.
+const FieldRulesBlock = `## Field rules the validator enforces
+
+- Text fields (` + "`invariant`, `result`, `title`, `description`, `reason`" + ` and the like): non-empty,
+  at most 4096 bytes, no leading or trailing whitespace, valid UTF-8, at least one visible character.
+- ` + "`trace`" + ` is ordered: the first item has kind ` + "`entrypoint`" + `, the last ` + "`sink`" + `, every item in
+  between ` + "`propagation`" + `. A one-item trace is ` + "`entrypoint`" + ` or ` + "`sink`" + `.
+- Every ` + "`file`" + `/` + "`line`" + ` you cite must exist at the audited commit.`
