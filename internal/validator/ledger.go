@@ -209,20 +209,22 @@ func validateSingleUnit(u CoverageUnit, rawUnit map[string]any, base, targetDir,
 	}
 
 	if !IsVisibleText(u.Surface, 0) {
-		addErr(fmt.Sprintf("%s.surface: invalid text", base))
+		addErr(fmt.Sprintf("%s.surface: invalid text: %s", base, TextProblem(u.Surface, 0)))
 	}
 	if !IsVisibleText(u.Boundary, 0) {
-		addErr(fmt.Sprintf("%s.boundary: invalid text", base))
+		addErr(fmt.Sprintf("%s.boundary: invalid text: %s", base, TextProblem(u.Boundary, 0)))
 	}
 	if !IsVisibleText(u.Subsystem, 0) {
-		addErr(fmt.Sprintf("%s.subsystem: invalid text", base))
+		addErr(fmt.Sprintf("%s.subsystem: invalid text: %s", base, TextProblem(u.Subsystem, 0)))
 	}
 	if !IsVisibleText(u.AttackClass, 0) {
-		addErr(fmt.Sprintf("%s.attack_class: invalid text", base))
+		addErr(fmt.Sprintf("%s.attack_class: invalid text: %s", base, TextProblem(u.AttackClass, 0)))
 	}
 	_, hasLifecycle := rawUnit["lifecycle"]
-	if hasLifecycle && (u.Lifecycle == nil || !IsVisibleText(*u.Lifecycle, 0)) {
-		addErr(fmt.Sprintf("%s.lifecycle: invalid text", base))
+	if hasLifecycle && u.Lifecycle == nil {
+		addErr(fmt.Sprintf("%s.lifecycle: invalid text: is null", base))
+	} else if hasLifecycle && !IsVisibleText(*u.Lifecycle, 0) {
+		addErr(fmt.Sprintf("%s.lifecycle: invalid text: %s", base, TextProblem(*u.Lifecycle, 0)))
 	}
 
 	var expectedID string
@@ -263,7 +265,7 @@ func validateSingleUnit(u CoverageUnit, rawUnit map[string]any, base, targetDir,
 	}
 
 	if !IsVisibleText(u.CoverageID, 65536) {
-		addErr(fmt.Sprintf("%s.coverage_id: invalid text", base))
+		addErr(fmt.Sprintf("%s.coverage_id: invalid text: %s", base, TextProblem(u.CoverageID, 65536)))
 	} else if expectedID != "" && u.CoverageID != expectedID {
 		addErr(fmt.Sprintf("%s.coverage_id: expected canonical ID %q", base, expectedID))
 	}
@@ -295,10 +297,10 @@ func validateSingleUnit(u CoverageUnit, rawUnit map[string]any, base, targetDir,
 	for idx, ex := range u.ExcludedBlocks {
 		ebase := fmt.Sprintf("%s.excluded_blocks[%d]", base, idx)
 		if !IsVisibleText(ex.Block, 0) {
-			addErr(fmt.Sprintf("%s.block: invalid text", ebase))
+			addErr(fmt.Sprintf("%s.block: invalid text: %s", ebase, TextProblem(ex.Block, 0)))
 		}
 		if !IsVisibleText(ex.Reason, 0) {
-			addErr(fmt.Sprintf("%s.reason: invalid text", ebase))
+			addErr(fmt.Sprintf("%s.reason: invalid text: %s", ebase, TextProblem(ex.Reason, 0)))
 		}
 		if seenExcl[ex.Block] {
 			addErr(fmt.Sprintf("%s.block: duplicate entry", ebase))

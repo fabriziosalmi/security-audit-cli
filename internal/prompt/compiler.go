@@ -130,10 +130,13 @@ func CompileHunter(
 		"## Workspace and Structured Result Contract\n\n"+
 			"- Canonical `agent_id`: `%s`\n"+
 			"- Writable scratch directory: `%s/agents/%s/scratch`\n"+
-			"- Retained artifacts prefix (parent-promoted only): `agents/%s/artifacts/`\n\n"+
-			"Schema branches (`confirmed` and `needs_validation`):\n```json\n%s\n```\n",
-		agentID, outputDir, agentID, agentID, schemas,
+			"- Retained artifacts prefix (parent-promoted only): `agents/%s/artifacts/`\n\n",
+		agentID, outputDir, agentID, agentID,
 	)
+	b.WriteString(HunterResultContract(agentID, assignedUnits))
+	b.WriteString("\n")
+	b.WriteString(spec.FieldRulesBlock)
+	fmt.Fprintf(&b, "\n\nSchema branches for `candidates` (`confirmed` and `needs_validation`):\n```json\n%s\n```\n", schemas)
 
 	return b.String(), nil
 }
@@ -152,6 +155,8 @@ func CompileVerifier(outputDir, agentID string, env *store.CandidateEnvelope, ca
 	b.Write(candJSON)
 	b.WriteString("\n```\n\n")
 	b.WriteString(spec.PromotionProcedureBlock)
+	b.WriteString("\n\n")
+	b.WriteString(spec.FieldRulesBlock)
 	b.WriteString("\n\n## Schema Branches (`confirmed`, `needs_validation`, `rejected`)\n\n```json\n")
 	b.WriteString(schemas)
 	b.WriteString("\n```\n\n")
