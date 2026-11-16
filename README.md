@@ -4,352 +4,231 @@
 [![security](https://github.com/fabriziosalmi/security-audit-cli/actions/workflows/security.yml/badge.svg)](https://github.com/fabriziosalmi/security-audit-cli/actions/workflows/security.yml)
 [![slopless](https://github.com/fabriziosalmi/security-audit-cli/actions/workflows/slopless.yml/badge.svg)](https://github.com/fabriziosalmi/security-audit-cli/actions/workflows/slopless.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/fabriziosalmi/security-audit-cli/badge)](https://scorecard.dev/viewer/?uri=github.com/fabriziosalmi/security-audit-cli)
-[![release](https://img.shields.io/badge/release-v0.1.4-blue)](https://github.com/fabriziosalmi/security-audit-cli/releases/tag/v0.1.4)
+[![release](https://img.shields.io/github/v/release/fabriziosalmi/security-audit-cli)](https://github.com/fabriziosalmi/security-audit-cli/releases/latest)
 [![go.mod](https://img.shields.io/badge/go-1.24%2B-00ADD8)](go.mod)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-`sec-audit` is a deterministic Go CLI and Model Context Protocol (MCP `stdio` JSON-RPC 2.0) server that enforces a 6-phase adversarial security audit state machine over source repositories.
+**Security audits run by AI agents, where nothing counts until it is checked on disk.**
 
-Built on the methodology and embedded domain playbooks of [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit), `sec-audit` replaces prompt-only instructions with hard programmatic gates: every coverage unit, source citation, local verification check, adversarial role transition, and final report artifact is verified on disk before the state machine advances.
+`sec-audit` is a single Go binary that turns an agent-driven code audit into a state machine with hard gates. Agents propose; the binary decides. A citation to a line that does not exist, a hunter grading its own finding, evidence that is really a symlink to `/etc/passwd`, or a source file edited after review is rejected in code, not by asking a model to be careful. The output is a `REPORT.md`, SARIF for code scanning, GHSA-style advisories, and a `sha256sum -c` manifest over all of it.
 
-One binary. Go 1.24+ standard library only. Zero external dependencies. Strict **1:1:1 parity** across CLI subcommands, MCP tools, and the optional VS Code / Cursor / Antigravity extension ([`editors/vscode/`](editors/vscode/)) via a single generic command registry.
+It runs as an MCP server for Claude Code, Cursor, Claude Desktop, Codex and other MCP clients, as a CLI, and as a VS Code extension. Standard library only, no dependencies.
 
----
+![sec-audit demo](docs/demo.gif)
 
-## Table of Contents
-
-- [Why sec-audit](#why-sec-audit)
-- [6-Phase State Machine](#6-phase-state-machine)
-- [1:1:1 CLI Subcommands, MCP Tools, and VS Code Commands](#111-cli-subcommands-mcp-tools-and-vs-code-commands)
-- [Deterministic Security and Reproducibility Invariants](#deterministic-security-and-reproducibility-invariants)
-- [Installation](#installation)
-- [MCP Server Configuration](#mcp-server-configuration)
-- [VS Code / Cursor / Antigravity Extension](#vs-code--cursor--antigravity-extension)
-- [End-to-End CLI Walkthrough](#end-to-end-cli-walkthrough)
-- [Canonical Output Artifacts](#canonical-output-artifacts)
-- [Measured Performance and Benchmarks](#measured-performance-and-benchmarks)
-- [Repository Architecture](#repository-architecture)
-- [License](#license)
-
----
-
-## Why sec-audit
-
-Multi-agent security audits degrade when orchestrators rely on unverified LLM prose:
-
-1. **Phantom citations**: Agents cite non-existent files, symlinks escaping the repository, or out-of-range line numbers.
-2. **Self-grading bias**: The same agent that proposes a hypothesis also confirms it or rewrites the final report record.
-3. **Silent coverage gaps**: Attack-class playbooks or repository entrypoints are silently skipped without explicit exclusion rationale.
-4. **Parser differentials**: Duplicate JSON keys (`{"verdict":"rejected","verdict":"confirmed"}`) or deeply nested payloads slip past standard unmarshalers.
-5. **Non-reproducible outputs**: Unordered map iteration produces different prompts, ledgers, or reports across runs.
-
-`sec-audit` eliminates these failure modes deterministically in code:
-
-- Every CLI subcommand (`sec-audit <subcommand>`) and MCP tool (`sec_audit_<subcommand>`) is bound through a single generic [`Bind[Req, Resp]`](internal/registry/registry.go) registration, guaranteeing 1:1 schema and execution parity by construction.
-- All 11 attack-class catalogs (`ATTACK-CLASSES.md` + 10 domain companions) and `report-schema.json` are embedded in the binary via `//go:embed` ([`internal/spec`](internal/spec/catalog.go)).
-- Phase 6 report rendering is blocked until [`Validate`](internal/engine/phase6_render.go) confirms 0 ledger errors, 0 finding errors, 100% cross-file fingerprint linkage, and adversarial role separation (`hunter != verifier != record_verifier`).
-
----
-
-## 6-Phase State Machine
-
-```mermaid
-flowchart TD
-    P1A["Phase 1a: init\n(Repo scan, budget gate, prior carryover)"] --> P1B["Phase 1b: architecture\n(Write architecture.md <= 1,000 words)"]
-    P1B --> P1C["Phase 1c: ledger-seed\n(Derive RFC 3986 + NFC coverage_id, verify paths)"]
-    P1C --> P2A["Phase 2: agent-assign (hunter)\n(Compile verbatim playbook prompt, isolate scratch)"]
-    P2A --> P2B["Phase 2: artifact-promote + hunter-submit\n(11-step *os.Root promote, verify reviewed_paths)"]
-    P2B --> P2C["Phase 2: critic-submit (post_wave / final_clean)\n(Archive reopened attempts[], add missing units)"]
-    P2C -->|"More waves required"| P2A
-    P2C -->|"final_clean stop=true"| P3["Phase 3: verifier-submit\n(Enforce verifier != hunter, verify trace on disk)"]
-    P3 --> P5["Phase 5: record-verify-submit\n(Enforce record_verifier != hunter && != verifier)"]
-    P5 --> P6A["Phase 6a: validate\n(O(N) JSON preflight, ledger + findings + cross-file)"]
-    P6A --> P6B["Phase 6b: render\n(REPORT.md, FINDINGS-DETAIL.md, SARIF, manifest.sha256)"]
-```
-
----
-
-## 1:1:1 CLI Subcommands, MCP Tools, and VS Code Commands
-
-Every subcommand accepts either CLI flags, `--input <path.json>`, or `--json '<raw-json>'` (use `--json -` to read from `stdin`), and emits deterministic indented JSON on `stdout`.
-
-| Phase | CLI Subcommand | MCP Tool | VS Code Command | Enforced Invariants |
-| :--- | :--- | :--- | :--- | :--- |
-| **1** | `sec-audit init` | `sec_audit_init` | `sec-audit.init` | Verifies `output_dir` is outside `target` (or git-ignored), enforces pre-recon budget reserve (`>= 6` for `quick`, `>= 7` for `standard`/`deep`), scans repository languages/manifests/companions, and evaluates prior-run carryovers. |
-| **1-2** | `sec-audit catalog` | `sec_audit_catalog` | `sec-audit.catalog` | Lists embedded companion playbooks or returns the verbatim Markdown and `When to use` guidance for any canonical `FILE.md#Heading` reference. |
-| **1** | `sec-audit architecture` | `sec_audit_architecture` | `sec-audit.architecture` | Validates visible prose and the ~1,000-word limit (`<= 1,100` words hard cap), then atomically writes `<output-dir>/architecture.md`. |
-| **1** | `sec-audit ledger-seed` | `sec_audit_ledger_seed` | `sec-audit.ledger-seed` | Derives RFC 3986 + Unicode NFC `coverage_id` values, verifies `starting_paths` inside `target` via `*os.Root`, optionally carries over SHA-256 unchanged clean units (`--carryover-unchanged`), sorts units lexicographically, and writes `coverage-ledger.json`. |
-| **1-5** | `sec-audit agent-assign` | `sec_audit_agent_assign` | `sec-audit.agent-assign` | Validates canonical lowercase `agent_id`, enforces budget reserves for remaining critics/verifiers, enforces adversarial role separation, creates `agents/<id>/scratch` and `artifacts`, and compiles the role prompt. |
-| **2-5** | `sec-audit artifact-promote` | `sec_audit_artifact_promote` | `sec-audit.artifact-promote` | Executes 11-step OS race-safe promotion from `agents/<id>/scratch` to `agents/<id>/artifacts` using `*os.Root`, `O_NOFOLLOW \| O_NONBLOCK`, `nlink == 1`, double-`Fstat`, and byte caps. |
-| **2** | `sec-audit hunter-submit` | `sec_audit_hunter_submit` | `sec-audit.hunter-submit` | Verifies every unit's `reviewed_paths` exist in `target` and cover `starting_paths`, pins source file SHA-256 digests, verifies check ownership and promoted artifacts, validates candidate schema, and updates `coverage-ledger.json`. |
-| **2** | `sec-audit critic-submit` | `sec_audit_critic_submit` | `sec-audit.critic-submit` | Archives reopened units into `attempts[]` with `reassignment_reason`, inserts `missing_units`, records `resolved_prior_leads`, and tracks `post_wave` and `final_clean` completion. |
-| **3** | `sec-audit verifier-submit` | `sec_audit_verifier_submit` | `sec-audit.verifier-submit` | Enforces `verifier != hunter`, validates final `confirmed`, `needs_validation`, or `rejected` record against `report-schema.json` and on-disk `file:line` citations, pins source file SHA-256 digests, and updates `findings.json`. |
-| **5** | `sec-audit record-verify-submit` | `sec_audit_record_verify_submit` | `sec-audit.record-verify-submit` | Enforces 3-way independence (`record_verifier != hunter` and `record_verifier != verifier`); if a material replacement is submitted, requires another fresh `record_verifier` before Phase 6. |
-| **5-6** | `sec-audit validate` | `sec_audit_validate` | `sec-audit.validate` | Runs single-pass $O(N)$ JSON preflight, `ValidateCoverageLedgerBytes`, `ValidateFindingsBytes`, `ValidateCrossFileConsistency`, source file SHA-256 drift verification, and optional `--fail-on` CI threshold gate. |
-| **6** | `sec-audit render` | `sec_audit_render` | `sec-audit.render` | Blocks if any validation, critic, source-drift, or Phase 5 invariant is unsatisfied; writes `REPORT.md`, `FINDINGS-DETAIL.md`, `NEEDS-VALIDATION.md`, `advisories/GHSA-*.md`, `findings.sarif`, and `manifest.sha256`. |
-| **1-6** | `sec-audit status` | `sec_audit_status` | `sec-audit.status` | Returns a compact zero-token summary of unit counts, unvalidated candidates, unverified Phase 5 records, source file SHA-256 drift, and the exact `next_required_actions[]` to reach `render`. |
-| **Meta** | `sec-audit version` | `initialize` (`serverInfo.version`) | Extension version | Prints the deterministic semantic version (`0.1.4`), also available via `--version` or `-v`. |
-
----
-
-## Deterministic Security and Reproducibility Invariants
-
-### 1. Single-Pass $O(N)$ JSON Preflight (`internal/validator/preflight.go`)
-Standard Go `encoding/json.Unmarshal` silently accepts duplicate JSON object keys (last key wins), enabling parser-differential smuggling across tools. [`ValidateJSONPreflight`](internal/validator/preflight.go) scans every JSON payload token-by-token in $O(N)$ before unmarshaling and enforces:
-- **Zero duplicate keys** at every object depth.
-- **`MaxNestingDepth = 64`** container nesting cap.
-- **`MaxObjectFields = 1,000`** keys per object cap.
-- **`MaxPreflightValues = 500,000`** total tokens cap and **`MaxInputBytes = 5 MiB`** file size cap.
-
-### 2. Kernel-Enforced `*os.Root` Repository Grounding (`internal/validator/common.go`)
-[`VerifyRepoFileAndLine`](internal/validator/common.go) verifies every cited repository path and line number using Go's kernel-backed `os.OpenRoot(targetDir)`:
-- Walks every parent segment with `root.Lstat` to reject intermediate symlinks or non-directory components.
-- Opens target files with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`.
-- Re-verifies `f.Stat()` on the opened file descriptor (`Mode().IsRegular()` and `Size() <= MaxInputBytes`).
-- Bounds line-counting reads via `io.LimitReader(f, MaxInputBytes+1)` so concurrent file growth inside the target workspace cannot cause unbounded memory allocation.
-
-### 3. 11-Step Race-Safe Artifact Promotion (`internal/promote/promote_unix.go`)
-[`PromoteAllowlist`](internal/promote/promote_unix.go) promotes local verification outputs from untrusted agent scratch directories without path-based TOCTOU races:
-1. Validates canonical relative path syntax and blocks reserved device names.
-2. Opens `scratchDir` via `os.OpenRoot`.
-3. Verifies every parent directory segment via `root.Lstat`.
-4. Inspects target metadata via `root.Lstat` (rejecting symlinks, FIFOs, sockets, devices).
-5. Opens descriptor with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`.
-6. Verifies `syscall.Fstat` on the opened descriptor (`S_IFREG`, `nlink == 1` to block hardlinks, size `<= maxFileBytes`).
-7. Reads in bounded chunks while enforcing both per-file (`1 MiB` default) and cumulative (`10 MiB` default) byte caps.
-8. Re-runs `syscall.Fstat` after reading and verifies `(Dev, Ino, Mode, Nlink, Size, ModTime)` did not mutate during read.
-9. Rejects non-UTF-8 or binary content containing NUL bytes.
-10. Walks destination parents via `artifactsRoot`, creates missing directories (`0700`), exclusively opens the destination leaf (`O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW`, `0600`), verifies `fstat` (`S_IFREG`, `nlink == 1`), writes, and calls `Sync()`.
-11. Returns the canonical run-relative artifact path (`agents/<agent-id>/artifacts/<rel>`).
-
-### 4. Cryptographic Source-File Anti-Drift Pinning (`internal/scanner/git.go`)
-[`VerifyAndPinSourceFiles`](internal/scanner/git.go) computes and pins the SHA-256 digest of every repository file examined by `hunter-submit` or cited in `verifier-submit` traces inside `.sec-audit-state.json`. Before `validate` or `render` succeeds, [`DetectSourceDrift`](internal/scanner/git.go) re-verifies each pinned path through `*os.Root` (`VerifyRepoFileAndLine`) and compares its current SHA-256 digest, failing closed if `.sec-audit-state.json` is missing or if any audited file was modified or swapped with a symlink mid-run.
-
-### 5. Bit-for-Bit Reproducibility and `manifest.sha256` (`internal/store`, `internal/engine`)
-All map keys, coverage units (`coverage_id`), findings (`fingerprint`), and candidate prompts are sorted lexicographically prior to serialization. Phase 6 `render` emits a cryptographic `manifest.sha256` covering all canonical run artifacts and `advisories/GHSA-<fingerprint>.md` files, verifiable with `shasum -a 256 -c manifest.sha256`.
-
----
-
-## Installation
-
-### Option 1: Prebuilt Signed Release Binary (macOS / Linux)
-
-Download the latest release archive for your platform (`darwin-arm64`, `darwin-amd64`, `linux-arm64`, `linux-amd64`) and verify its GitHub SLSA Build Provenance attestation:
+## Try it in 30 seconds
 
 ```sh
-gh release download v0.1.4 --repo fabriziosalmi/security-audit-cli --pattern "sec-audit-darwin-arm64.tar.gz"
-gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
-tar -xzf sec-audit-darwin-arm64.tar.gz
-rm -f ~/.local/bin/sec-audit && install -m 0755 sec-audit ~/.local/bin/sec-audit
+go install github.com/fabriziosalmi/security-audit-cli/cmd/sec-audit@latest   # or a release binary, see Install
+sec-audit demo
 ```
 
-### Option 2: `go install`
+`demo` audits a small Go API bundled in the binary, with scripted agents instead of a model: 22 steps, two confirmed findings, one false positive rejected by an independent verifier, four bad submissions blocked. It takes about a third of a second (median 351 ms over 5 runs on an Apple M4) and leaves everything on disk, so you can open `REPORT.md` and run `shasum -a 256 -c manifest.sha256` yourself. If any gate lets a bad submission through, `demo` exits non-zero.
 
-Requires Go `1.24` or newer. All 11 attack-class catalogs and schemas are embedded via `//go:embed`:
+## Audit your own repository
+
+```sh
+sec-audit setup claude      # or: cursor, claude-desktop, print
+```
+
+Then, in a new Claude Code session:
+
+```text
+/mcp__sec-audit__audit /absolute/path/to/repo
+```
+
+or just ask "audit this repository with sec-audit". The server sends the agent its operating instructions on connect, and the `audit` prompt carries the full procedure: recon, coverage plan, hunting waves, coverage critics, adversarial verification, independent record verification, render. The agent you talk to becomes the coordinator and starts a fresh subagent for every role.
+
+## Why
+
+Asking a model to audit code produces confident prose. In practice it fails in a few predictable ways:
+
+| Failure | What `sec-audit` does instead |
+| :--- | :--- |
+| Citations to files or lines that do not exist | Every `file:line` in a candidate or record is opened through `os.OpenRoot` and checked against the real line count before it is accepted. |
+| The agent that found a bug also confirms it | Roles are separate agents with single-use ids. `verifier != hunter`, `record_verifier != hunter, verifier`, enforced at assignment and again at submission. |
+| Silent coverage gaps | Work is a ledger of coverage units derived from entrypoints, trust boundaries and attack-class playbooks. Render refuses while units are planned or in progress, or while hunter-reported gaps have not been reviewed by a coverage critic. |
+| Report describes code that has changed | Every reviewed source file is pinned by SHA-256. `validate`, `status` and `render` re-hash them and refuse on drift. |
+| Evidence files that point elsewhere | Agent scratch output is promoted to evidence through an 11-step descriptor-based copy: no symlinks, no hardlinks, no FIFOs, byte caps, re-`fstat` after read. |
+| Ambiguous JSON | Every payload is pre-scanned: duplicate keys at any depth are rejected (`{"verdict":"rejected","verdict":"confirmed"}`), with caps on depth, fields, tokens and size. |
+| Different output on every run | Units, findings and prompts are sorted before serialization; the run ends with a SHA-256 manifest of every artifact. |
+
+The audit method and the 11 embedded playbooks (`ATTACK-CLASSES.md` plus 10 domain companions) come from [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit). `sec-audit` replaces its prompt-only rules with checks in code.
+
+## How a run works
+
+```mermaid
+flowchart LR
+    C["Coordinator<br/>(your agent)"] -->|init, architecture,<br/>ledger-seed| L[(coverage ledger)]
+    C -->|agent-assign| H["Hunter subagents<br/>(per wave)"]
+    H -->|hunter-submit<br/>citations checked| L
+    C -->|agent-assign| K["Coverage critic"]
+    K -->|critic-submit<br/>reopen or add units| L
+    C -->|agent-assign| V["Verifier<br/>(not the hunter)"]
+    V -->|verifier-submit<br/>confirm, reject, needs_validation| F[(findings)]
+    C -->|agent-assign| R["Record verifier<br/>(neither of them)"]
+    R -->|record-verify-submit| F
+    F -->|validate, render| O["REPORT.md, SARIF,<br/>advisories, manifest"]
+```
+
+`agent-assign` compiles the exact prompt for each role from the architecture summary, the assigned units and the verbatim playbook blocks, and creates the agent's isolated scratch directory. `status` returns `next_required_actions`, so the coordinator never has to guess what comes next.
+
+## What the demo checks
+
+These are the real gate messages from `sec-audit demo`:
+
+| Bad submission | Gate | Message |
+| :--- | :--- | :--- |
+| Evidence file is a symlink to `/etc/passwd` | `artifact-promote` | `scratch leaf "poc-output.txt" is not a regular non-symlink file` |
+| Trace cites `internal/notes/handler.go:999` | `hunter-submit` | `line 999 out of range (file has 67 lines)` |
+| The hunter asks to verify its own finding | `agent-assign` | `agent_id "hunter-wave1-a" was already used in this run` |
+| An audited file is edited before render | `status`, `render` | SHA-256 drift on `internal/notes/handler.go`, render refused |
+
+It also shows `render` refusing before the Phase 5 record check, a verifier rejecting a plausible-looking SQL injection because the query uses placeholders, and `--fail-on high` failing the CI gate.
+
+## Install
+
+**Release binary** (macOS and Linux, amd64 and arm64), with SLSA build provenance:
+
+```sh
+gh release download --repo fabriziosalmi/security-audit-cli --pattern "sec-audit-darwin-arm64.tar.gz"
+gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
+tar -xzf sec-audit-darwin-arm64.tar.gz
+install -m 0755 sec-audit ~/.local/bin/sec-audit
+```
+
+**Go** 1.24 or newer:
 
 ```sh
 go install github.com/fabriziosalmi/security-audit-cli/cmd/sec-audit@latest
 ```
 
-### Option 3: From Source
+**From source:** `git clone` this repository and run `make install` (installs to `~/.local/bin`, with an ad-hoc code signature on macOS).
 
-```sh
-git clone https://github.com/fabriziosalmi/security-audit-cli.git
-cd security-audit-cli
-make install
-```
+## Connect your agent
 
-`make install` compiles `sec-audit` with `-trimpath -ldflags="-s -w"`, removes any pre-existing binary at `~/.local/bin/sec-audit` before installing (preventing macOS `amfid` vnode cache `SIGKILL 137`), and applies an ad-hoc code signature on macOS.
+`sec-audit setup <client>` writes the configuration for you:
 
-### Supply Chain Verification (SLSA Provenance, Cosign Keyless, SBOM)
+| Client | What `setup` does |
+| :--- | :--- |
+| `claude` | Runs `claude mcp add --scope user sec-audit -- <binary> mcp` |
+| `cursor` | Adds `sec-audit` to `~/.cursor/mcp.json`, keeps every other key, saves the old file as `mcp.json.bak` |
+| `claude-desktop` | Same, for `claude_desktop_config.json` (macOS and Linux) |
+| `print` | Prints the snippets for these and for Codex, changes nothing |
 
-Every tagged GitHub release ([`.github/workflows/release.yml`](.github/workflows/release.yml)) publishes `CGO_ENABLED=0` reproducible POSIX archives (`linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`), `sec-audit-vscode-0.1.4.vsix`, `SHA256SUMS.txt`, dual SBOMs (`sec-audit.sbom.spdx.json` and `sec-audit.sbom.cdx.json`), keyless Sigstore Cosign OIDC bundles (`.bundle`), and GitHub SLSA Build Provenance + SBOM attestations:
-
-```sh
-# 1. Verify SLSA Build Provenance and SBOM attestations via GitHub CLI
-gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
-
-# 2. Verify SHA256SUMS.txt and SBOMs via Sigstore Cosign keyless OIDC bundle
-cosign verify-blob \
-  --certificate-identity-regexp '^https://github.com/fabriziosalmi/security-audit-cli/' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --bundle SHA256SUMS.txt.bundle \
-  SHA256SUMS.txt
-
-shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-```
-
----
-
-## MCP Server Configuration
-
-Run `sec-audit mcp` to start the JSON-RPC 2.0 server over `stdio`.
-
-### Claude Code
-
-```sh
-claude mcp add sec-audit ~/.local/bin/sec-audit mcp
-```
-
-### Claude Desktop / Cursor / Antigravity (`mcp_config.json`)
+Add `--print` to any client to see the change without making it. For any other MCP client:
 
 ```json
 {
   "mcpServers": {
-    "sec-audit": {
-      "command": "/Users/your-user/.local/bin/sec-audit",
-      "args": ["mcp"]
-    }
+    "sec-audit": { "command": "/absolute/path/to/sec-audit", "args": ["mcp"] }
   }
 }
 ```
 
----
+## CLI and CI
 
-## VS Code / Cursor / Antigravity Extension
+Every step is a subcommand and the MCP tool `sec_audit_<step>`, generated from one registry, so the two cannot drift. Inputs come from flags, `--input file.json`, or `--json '<object>'` (`--json -` reads stdin).
 
-An optional, zero-dependency IDE cockpit ([`editors/vscode/`](editors/vscode/)) provides 1:1:1 parity with the CLI and MCP server:
-
-- **Run Status and Next Actions (`secAuditStatusView`)**: Live `FileSystemWatcher` over `<output-dir>` showing phase/wave progress, `agents_spent / budget`, SHA-256 source-drift warnings, and `next_required_actions[]`.
-- **Findings and Source Trace (`secAuditFindingsView` + `Problems` tab)**: Groups findings by `Confirmed`, `Needs Validation`, and `Rejected`; click any `[entrypoint]`, `[propagation]`, or `[sink]` node to jump to the exact `file:line`, view inline diagnostics, or open `advisories/GHSA-<fingerprint>.md`.
-- **Coverage Ledger (`secAuditLedgerView`)**: Browse coverage units by status (`planned`, `in_progress`, `covered`, `candidate`, `blocked`, `deferred`).
-- **Attack-Class Catalog (`secAuditCatalogView`)**: Read embedded `ATTACK-CLASSES.md` and all 10 domain companion playbooks inside the editor.
+On a terminal, `init`, `status`, `validate`, `render` and `version` print readable text; everywhere else (pipes, CI, agents, the VS Code extension) they print JSON. `--format json|text` forces either; `NO_COLOR` is honoured.
 
 ```sh
-# Build and install from source (or download sec-audit-vscode-0.1.4.vsix from Releases)
-make vsix
-code --install-extension dist/sec-audit-vscode-0.1.4.vsix
+sec-audit status   --output-dir ./run                   # progress and next required actions
+sec-audit validate --output-dir ./run --fail-on high    # exit 1 if invalid, 2 if the gate fails
+sec-audit render   --output-dir ./run --fail-on high
+(cd ./run && shasum -a 256 -c manifest.sha256)
 ```
 
----
+`findings.sarif` is SARIF 2.1.0 and can be uploaded with `github/codeql-action/upload-sarif`. `--fail-on` accepts `critical`, `high`, `medium`, `low`, `needs_validation` and `any`.
 
-## End-to-End CLI Walkthrough
+<details>
+<summary>All subcommands</summary>
 
-```sh
-# 1. Initialize an audit run outside the target repository
-sec-audit init \
-  --target /path/to/repo \
-  --output-dir /tmp/audit-run-1 \
-  --profile standard
+| Phase | Subcommand | Enforced invariants |
+| :--- | :--- | :--- |
+| 1 | `init` | `output_dir` outside the target (or git-ignored), pre-recon budget reserve (6 for `quick`, 7 for `standard`/`deep`), repo scan for languages, manifests, entrypoints and recommended playbooks, prior-run carryover. |
+| 1-2 | `catalog` | Lists the embedded playbooks or returns the verbatim text of a `FILE.md#Heading` block. |
+| 1 | `architecture` | Visible prose, at most 1,100 words, written atomically to `architecture.md`. |
+| 1 | `ledger-seed` | Derives RFC 3986 + Unicode NFC `coverage_id`s, checks `starting_paths` inside the target, checks block references against the catalog, optional SHA-256 carryover of unchanged clean units. |
+| 1-5 | `agent-assign` | Lowercase single-use `agent_id`, budget reserves for critics and verifiers, role separation, isolated `scratch/` and `artifacts/`, compiled role prompt. |
+| 2-5 | `artifact-promote` | 11-step race-safe copy from `scratch/` to `artifacts/` (`os.Root`, `O_NOFOLLOW`, `nlink == 1`, double `fstat`, byte caps, UTF-8 only). |
+| 2 | `hunter-submit` | `reviewed_paths` exist and cover `starting_paths`, every citation checked on disk, sources pinned by SHA-256, check ownership and promoted artifacts verified, candidate schema validated. |
+| 2 | `critic-submit` | Archives reopened units into `attempts[]` with a reason, adds missing units, records `post_wave` and `final_clean`. |
+| 3 | `verifier-submit` | `verifier != hunter`, record validated against `report-schema.json`, citations checked on disk, `findings.json` updated. |
+| 5 | `record-verify-submit` | `record_verifier` differs from hunter and verifier; a material replacement needs one more fresh record verifier. |
+| 5-6 | `validate` | JSON preflight, ledger and findings validators, cross-file consistency, SHA-256 drift, optional `--fail-on` gate. |
+| 6 | `render` | Refuses on any validation error, drift, unverified candidate or record, unreviewed hunter gap, or open unit; writes the reports, SARIF, advisories and manifest. |
+| 1-6 | `status` | Unit counts, open candidates, drift, and `next_required_actions`. |
 
-# 2. Inspect embedded attack-class catalogs
-sec-audit catalog
-sec-audit catalog --block "ATTACK-CLASSES.md#Resource and file handling"
+Meta commands outside the registry: `demo`, `setup`, `mcp`, `version`.
 
-# 3. Write Phase 1b architecture summary (<= 1,000 words)
-sec-audit architecture \
-  --output-dir /tmp/audit-run-1 \
-  --file /tmp/architecture.md
+</details>
 
-# 4. Seed the deterministic coverage ledger
-sec-audit ledger-seed \
-  --output-dir /tmp/audit-run-1 \
-  --input /tmp/seed-units.json
+## Output
 
-# 5. Assign a Phase 2 hunter and compile its verbatim playbook prompt
-sec-audit agent-assign \
-  --output-dir /tmp/audit-run-1 \
-  --role hunter \
-  --agent-id hunter-wave1-a \
-  --coverage-ids "<coverage-id-1>,<coverage-id-2>"
-
-# 6. Promote local check evidence and submit hunter results
-sec-audit artifact-promote \
-  --output-dir /tmp/audit-run-1 \
-  --agent-id hunter-wave1-a \
-  --files "check_output.txt"
-
-sec-audit hunter-submit --input /tmp/hunter-wave1-a-result.json
-
-# 7. Run post-wave and final-clean coverage critics
-sec-audit agent-assign --output-dir /tmp/audit-run-1 --role critic --agent-id critic-wave1
-sec-audit critic-submit --input /tmp/critic-wave1.json
-
-sec-audit agent-assign --output-dir /tmp/audit-run-1 --role critic --agent-id critic-final
-sec-audit critic-submit --critic-kind final_clean --input /tmp/critic-final.json
-
-# 8. Verify candidate findings with a fresh Phase 3 verifier (verifier != hunter)
-sec-audit agent-assign \
-  --output-dir /tmp/audit-run-1 \
-  --role verifier \
-  --agent-id verifier-find-0001 \
-  --fingerprint FIND-0001
-
-sec-audit verifier-submit --input /tmp/verifier-find-0001.json
-
-# 9. Verify confirmed finding records with a fresh Phase 5 record_verifier
-sec-audit agent-assign \
-  --output-dir /tmp/audit-run-1 \
-  --role record_verifier \
-  --agent-id rec-verifier-find-0001 \
-  --fingerprint FIND-0001
-
-sec-audit record-verify-submit --input /tmp/rec-verifier-find-0001.json
-
-# 10. Inspect live run status, validate with CI exit gate, and render final reports + SHA-256 manifest
-sec-audit status --output-dir /tmp/audit-run-1
-sec-audit validate --output-dir /tmp/audit-run-1 --fail-on high
-sec-audit render --output-dir /tmp/audit-run-1 --fail-on high
-(cd /tmp/audit-run-1 && shasum -a 256 -c manifest.sha256)
-```
-
----
-
-## Canonical Output Artifacts
-
-Every completed audit run in `<output-dir>` produces canonical artifacts verified by `manifest.sha256`:
-
-| File | Purpose |
+| File | Contents |
 | :--- | :--- |
-| `run-metadata.json` | Run configuration, git `source_ref`, `dirty_worktree` flag, `profile`, `agents_spent`, `selected_companion_files`, and terminal `run_status`. |
-| `architecture.md` | Phase 1b trust boundaries, entrypoints, privileged sinks, and subsystem map (`<= 1,000` words). |
-| `coverage-ledger.json` | Canonical sorted array of coverage units, `local_checks`, `reviewed_paths`, `attempts[]`, and `result_fingerprints`. |
-| `findings.json` | Canonical sorted array of verified `confirmed`, `needs_validation`, and `rejected` records conforming to `report-schema.json`. |
-| `REPORT.md` | Executive and technical summary with scope statement, severity table, confirmed findings, blocked leads, hardening notes, and coverage summary. |
-| `FINDINGS-DETAIL.md` | Full source trace (`entrypoint -> propagation* -> sink`), evidence citations, preconditions, reproduction instructions, and code fixes. |
-| `NEEDS-VALIDATION.md` | Unresolved leads requiring external environment or deployment validation, including validation plans and blockers. |
-| `findings.sarif` | SARIF 2.1.0 report mapping confirmed findings and source locations for GitHub Code Scanning and static analysis pipelines. |
-| `advisories/GHSA-<fingerprint>.md` | Standalone Coordinated Disclosure / GitHub Security Advisory Markdown documents generated for each confirmed finding. A fingerprint with characters outside `[A-Za-z0-9._-]` (for example `/` or `:`) is written as one file named with `_` in their place plus the first 8 hex digits of its SHA-256, so an advisory never leaves `advisories/`. |
-| `manifest.sha256` | Standard `sha256sum -c` / `shasum -a 256 -c` manifest of all canonical artifacts and advisories above. |
+| `REPORT.md` | Scope statement, severity table, confirmed findings, needs-validation leads, hardening notes, coverage summary. |
+| `FINDINGS-DETAIL.md` | Full trace (`entrypoint -> propagation -> sink`), evidence, preconditions, reproduction, fix. |
+| `NEEDS-VALIDATION.md` | Leads that need a deployed environment, with blockers and a validation plan. |
+| `findings.sarif` | SARIF 2.1.0 for GitHub code scanning and other tools. |
+| `advisories/GHSA-<fingerprint>.md` | One coordinated-disclosure advisory per confirmed finding. Fingerprints with characters outside `[A-Za-z0-9._-]` get `_` in their place plus 8 hex digits of their SHA-256, so an advisory never leaves `advisories/`. |
+| `coverage-ledger.json`, `findings.json`, `run-metadata.json`, `architecture.md` | Machine-readable state of the run. |
+| `manifest.sha256` | `sha256sum -c` / `shasum -a 256 -c` manifest of all of the above. |
 
----
+## VS Code, Cursor and Antigravity extension
 
-## Measured Performance and Benchmarks
+An optional extension in [`editors/vscode/`](editors/vscode/) shows run status and next actions, findings grouped by verdict with click-through to each trace step and inline diagnostics, the coverage ledger, and the playbook catalog. Install the `.vsix` from the release assets, or build it with `make vsix`.
 
-Measured on Apple M4 (`darwin/arm64`, Go `1.24+`) via `make bench` and `make fuzz`:
+## Supply chain
 
-| Benchmark / Suite | Latency / Throughput | Memory (`B/op`) | Allocations (`allocs/op`) |
-| :--- | :--- | :--- | :--- |
-| [`BenchmarkDeriveCoverageID`](internal/validator/benchmark_test.go) | `3,041 ns/op` | `208 B/op` | `1 alloc/op` |
-| [`BenchmarkValidateCoverageLedger`](internal/validator/benchmark_test.go) | `19,951 ns/op` (`40.65 MB/s`) | `11,510 B/op` | `256 allocs/op` |
-| [`BenchmarkValidateFindings`](internal/validator/benchmark_test.go) | `26,282 ns/op` (`44.29 MB/s`) | `20,234 B/op` | `477 allocs/op` |
-| [`BenchmarkEndToEndWorkflow`](internal/engine/reproducibility_test.go) (full 6-phase run + 10 APFS `fsync` calls) | `80.9 ms/op` | `322,890 B/op` | `1,616 allocs/op` |
-| [`FuzzValidateFindingsBytes`](internal/validator/benchmark_test.go) | `147,798 execs/sec` (`598,631` execs / 5s) | `n/a` | `0 crashes / 0 panics` |
+Tagged releases ([`release.yml`](.github/workflows/release.yml)) publish `CGO_ENABLED=0` archives for four platforms, the `.vsix`, `SHA256SUMS.txt`, SPDX and CycloneDX SBOMs, keyless Sigstore bundles, and GitHub build provenance and SBOM attestations:
 
----
+```sh
+gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
+cosign verify-blob \
+  --certificate-identity-regexp '^https://github.com/fabriziosalmi/security-audit-cli/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --bundle SHA256SUMS.txt.bundle SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+```
 
-## Repository Architecture
+## Measurements
+
+Apple M4, `darwin/arm64`, measured on 2026-11-16 with `go test -bench=. -benchmem ./internal/validator ./internal/engine`:
+
+| Benchmark | Time | Memory | Allocations |
+| :--- | ---: | ---: | ---: |
+| `BenchmarkDeriveCoverageID` | 3.4 µs/op | 208 B/op | 1 |
+| `BenchmarkValidateCoverageLedger` | 19.2 µs/op (42 MB/s) | 11.4 KB/op | 256 |
+| `BenchmarkValidateFindings` | 27.0 µs/op (43 MB/s) | 20.2 KB/op | 477 |
+| `BenchmarkEndToEndWorkflow` (full run, `fsync` included) | 141 ms/op | 410 KB/op | 3,036 |
+| `sec-audit demo` (22 steps, 5 runs) | median 351 ms | | |
+
+`make test` runs `go vet` and the race detector over every package; `make fuzz` runs the four fuzz targets.
+
+## Repository layout
 
 ```text
-security-audit-cli/
-├── cmd/sec-audit/          # CLI entrypoint and flag-to-JSON normalizer (89.8% coverage)
-├── editors/vscode/         # Optional 1:1:1 VS Code extension + pure-Go VSIX packager
-└── internal/
-    ├── engine/             # Phase 1-6 state machine and role gates (79.4% coverage)
-    ├── mcp/                # JSON-RPC 2.0 stdio server (90.6% coverage)
-    ├── promote/            # 11-step *os.Root race-safe artifact promotion (81.5% coverage)
-    ├── prompt/             # Deterministic role prompt compiler (97.5% coverage)
-    ├── registry/           # Generic Bind[Req, Resp] 1:1 CLI/MCP registry (92.5% coverage)
-    ├── report/             # Deterministic Markdown, GHSA, and SARIF 2.1.0 builders (92.2% coverage)
-    ├── scanner/            # Table-driven repo scanner and git/carryover/drift inspector (89.4% coverage)
-    ├── spec/               # Embedded playbooks and report-schema.json (94.2% coverage)
-    ├── store/              # RunStore and crash-safe WriteFileAtomic (81.4% coverage)
-    └── validator/          # O(N) JSON preflight, ledger/findings/root validators (84.0% coverage)
+cmd/sec-audit/        CLI entrypoint, demo and setup commands, text output
+editors/vscode/       VS Code extension and a pure-Go VSIX packager
+internal/demo/        Embedded demo target and scripted run
+internal/engine/      Phase 1-6 state machine and role gates
+internal/mcp/         JSON-RPC 2.0 stdio server, instructions, audit prompt
+internal/promote/     Race-safe artifact promotion
+internal/prompt/      Role prompt compiler
+internal/registry/    One registry for CLI subcommands and MCP tools
+internal/report/      Markdown, advisory and SARIF builders
+internal/scanner/     Repo scanner, git metadata, carryover, drift
+internal/spec/        Embedded playbooks and report-schema.json
+internal/store/       Run store and atomic writes
+internal/validator/   JSON preflight, ledger, findings and path validators
 ```
 
----
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright (c) 2026 Fabrizio Salmi.
-Embedded security audit playbooks in `internal/spec/assets/` are adapted from [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit).
+[MIT](LICENSE). Copyright (c) 2026 Fabrizio Salmi. The playbooks in `internal/spec/assets/` are adapted from [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill/tree/main/skills/security-audit).

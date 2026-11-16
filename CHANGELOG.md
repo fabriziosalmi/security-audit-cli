@@ -8,7 +8,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
-- **`sec-audit demo`**: runs a complete audit (recon, hunt, two coverage critics, three Phase 3 verifiers, two Phase 5 record verifiers, render) against a small Go API embedded in the binary, with scripted agent output instead of a model. It submits four things a bad agent would submit (a symlink to `/etc/passwd` as evidence, a citation to line 999 of a 67-line file, the hunter asking to verify its own finding, and a source file edited after review) and exits non-zero if any gate accepts one. It leaves the target and the run on disk so `REPORT.md`, `findings.sarif`, the advisories and `manifest.sha256` can be inspected. Measured on Apple M4: 22 steps in about 300 ms.
+- **`sec-audit demo`**: runs a complete audit (recon, hunt, two coverage critics, three Phase 3 verifiers, two Phase 5 record verifiers, render) against a small Go API embedded in the binary, with scripted agent output instead of a model. It submits four things a bad agent would submit (a symlink to `/etc/passwd` as evidence, a citation to line 999 of `handler.go`, the hunter asking to verify its own finding, and a source file edited after review) and exits non-zero if any gate accepts one. It leaves the target and the run on disk so `REPORT.md`, `findings.sarif`, the advisories and `manifest.sha256` can be inspected. Measured on Apple M4: 22 steps, median 351 ms over 5 runs.
 - **MCP `instructions` and an `audit` prompt**: `initialize` now returns instructions that tell the coordinating agent how to drive the tools, and `prompts/list` / `prompts/get` expose an `audit` prompt (arguments `target`, `profile`, `output_dir`) with the full procedure. Claude Code lists it as `/mcp__sec-audit__audit`. `TestPlaybookNamesOnlyRealTools` fails if the text names a tool that is not registered.
 - **`sec-audit setup claude|cursor|claude-desktop|print`**: registers the MCP server. `claude` runs `claude mcp add --scope user`; `cursor` and `claude-desktop` merge an entry into the JSON config, keep every other key, and save the previous file as `.bak`; `--print` shows the change without making it.
 - **Readable output on a terminal**: `init`, `status`, `validate`, `render` and `version` print text when stdout is a terminal and JSON otherwise (pipes, CI, agents, the VS Code extension). `--format json|text` forces either; `NO_COLOR` is honoured.
@@ -17,6 +17,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- **A citation to the line after a trailing newline was accepted (found while building the demo)**: the line count was `newlines + 1`, so a file ending in `\n` had one more citable line than it shows, and `file.go:<last+1>` passed `hunter-submit` and `verifier-submit`. `validator.CountLines` counts the way an editor does; `TestCitationPastTrailingNewlineIsRejected` fails with the old count.
 - **`initialize` reported `serverInfo.version` `0.1.2`** while the binary was `0.1.4`: the value was hardcoded in `internal/mcp`. The server now reports the version the binary was built with (`-X main.Version`); `TestMCPServerVersionMatchesCLI` fails if the two diverge.
 
 - **`render` writes every advisory inside `advisories/` (found while auditing lmget)**:
