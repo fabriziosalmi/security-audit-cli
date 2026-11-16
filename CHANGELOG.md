@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
 ### Added
 
 - **`sec-audit demo`**: runs a complete audit (recon, hunt, two coverage critics, three Phase 3 verifiers, two Phase 5 record verifiers, render) against a small Go API embedded in the binary, with scripted agent output instead of a model. It submits four things a bad agent would submit (a symlink to `/etc/passwd` as evidence, a citation to line 999 of `handler.go`, the hunter asking to verify its own finding, and a source file edited after review) and exits non-zero if any gate accepts one. It leaves the target and the run on disk so `REPORT.md`, `findings.sarif`, the advisories and `manifest.sha256` can be inspected. Measured on Apple M4: 22 steps, median 351 ms over 5 runs.
