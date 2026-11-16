@@ -363,15 +363,23 @@ func VerifyRepoFileAndLine(targetDir, relPath string, line int) error {
 			return fmt.Errorf("source path %q exceeds %d byte limit", relPath, MaxInputBytes)
 		}
 		content := buf.Bytes()
-		lineCount := bytes.Count(content, []byte{'\n'}) + 1
-		if len(content) == 0 {
-			lineCount = 0
-		}
+		lineCount := CountLines(content)
 		if line < 1 || line > lineCount {
 			return fmt.Errorf("source path %q line %d out of range (file has %d lines)", relPath, line, lineCount)
 		}
 	}
 	return nil
+}
+
+// CountLines returns the number of lines an editor shows for content: a
+// trailing newline ends the last line instead of starting an empty one, so
+// "a\nb\n" has 2 lines, "a\nb" has 2, and an empty file has 0.
+func CountLines(content []byte) int {
+	n := bytes.Count(content, []byte{'\n'})
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		n++
+	}
+	return n
 }
 
 // VerifyOutputRegularFile checks that relPath exists inside outputDir using kernel-enforced *os.Root

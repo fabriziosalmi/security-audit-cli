@@ -463,3 +463,28 @@ func TestValidateFindingsAllVerdictsAndNestedAdditionalProps(t *testing.T) {
 		t.Fatalf("expected VerifyRepoFileAndLine to reject file exceeding MaxInputBytes")
 	}
 }
+
+// A trailing newline does not create a citable line. Before CountLines,
+// "a\nb\n" counted as 3 lines and a citation to line 3 was accepted.
+func TestCitationPastTrailingNewlineIsRejected(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "nl.go"), []byte("a\nb\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "nonl.go"), []byte("a\nb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"nl.go", "nonl.go"} {
+		if err := validator.VerifyRepoFileAndLine(repo, f, 2); err != nil {
+			t.Fatalf("%s line 2 must be valid: %v", f, err)
+		}
+		if err := validator.VerifyRepoFileAndLine(repo, f, 3); err == nil {
+			t.Fatalf("%s line 3 does not exist and must be rejected", f)
+		}
+	}
+	for in, want := range map[string]int{"": 0, "\n": 1, "a": 1, "a\n": 1, "a\nb": 2, "a\nb\n": 2, "a\n\n": 2} {
+		if got := validator.CountLines([]byte(in)); got != want {
+			t.Errorf("CountLines(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
