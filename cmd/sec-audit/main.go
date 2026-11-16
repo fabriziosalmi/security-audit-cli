@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/fabriziosalmi/security-audit-cli/internal/demo"
 	"github.com/fabriziosalmi/security-audit-cli/internal/engine"
 	"github.com/fabriziosalmi/security-audit-cli/internal/mcp"
 	"github.com/fabriziosalmi/security-audit-cli/internal/registry"
@@ -32,7 +33,20 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		printUsage(stdout)
 		return 0
 	}
-	if sub == "-v" || sub == "--version" || sub == "version" {
+	rest, format, err := extractFormat(args[1:])
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	text := format == formatText || (format == formatAuto && isTerminal(stdout))
+	t := tty{w: stdout, color: format != formatJSON && useColor(stdout)}
+
+	switch sub {
+	case "-v", "--version", "version":
+		if text {
+			fmt.Fprintf(stdout, "sec-audit %s (%s/%s)\n", Version, runtime.GOOS, runtime.GOARCH)
+			return 0
+		}
 		vOut, _ := json.MarshalIndent(map[string]string{
 			"name":    "sec-audit",
 			"version": Version,
@@ -41,13 +55,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}, "", "  ")
 		fmt.Fprintln(stdout, string(vOut))
 		return 0
-	}
-	if sub == "mcp" {
+	case "mcp":
+		mcp.Version = Version
 		if err := mcp.ServeStdio(stdin, stdout); err != nil {
 			fmt.Fprintf(stderr, "mcp server error: %v\n", err)
 			return 1
 		}
 		return 0
+	case "demo":
+		return runDemo(rest, stdout, stderr, t.color)
+	case "setup":
+		return runSetup(rest, stdout, stderr)
 	}
 
 	if _, ok := registry.BySubcommand(sub); !ok {
@@ -56,7 +74,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	rawArgs, err := parseSubcommandFlags(sub, args[1:], stdin)
+	rawArgs, err := parseSubcommandFlags(sub, rest, stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -64,13 +82,19 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	res, err := registry.DispatchSubcommand(sub, rawArgs)
 	if err != nil {
+		if text {
+			fmt.Fprintf(stderr, "%s %s\n", tty{w: stderr, color: useColor(stderr)}.s("1;31", "error:"), err.Error())
+			return 1
+		}
 		errOut, _ := json.MarshalIndent(map[string]any{"error": err.Error()}, "", "  ")
 		fmt.Fprintln(stderr, string(errOut))
 		return 1
 	}
 
-	out, _ := json.MarshalIndent(res, "", "  ")
-	fmt.Fprintln(stdout, string(out))
+	if !text || !renderText(sub, res, t) {
+		out, _ := json.MarshalIndent(res, "", "  ")
+		fmt.Fprintln(stdout, string(out))
+	}
 	if m, isMap := res.(map[string]any); isMap {
 		if v, hasValid := m["valid"].(bool); hasValid && !v {
 			return 1
@@ -273,15 +297,32 @@ func parseSubcommandFlags(sub string, args []string, stdin io.Reader) (json.RawM
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "sec-audit: Deterministic 6-Phase Security Audit CLI & MCP Server (1:1 parity)")
-	fmt.Fprintln(w, "\nUsage:")
-	fmt.Fprintln(w, "  sec-audit <subcommand> [flags]")
-	fmt.Fprintln(w, "  sec-audit mcp")
-	fmt.Fprintln(w, "  sec-audit version")
-	fmt.Fprintln(w, "\nSubcommands (1:1 with MCP tools sec_audit_<subcommand>):")
+	fmt.Fprintln(w, "sec-audit: gated multi-agent security audits. Agents propose, deterministic gates decide.")
+	fmt.Fprintln(w, "\nUsage: sec-audit <command> [flags]")
+	fmt.Fprintln(w, "\nStart here:")
+	fmt.Fprintf(w, "  %-21s %s\n", "demo", "Run a complete audit of a bundled vulnerable API in under a second, no LLM")
+	fmt.Fprintf(w, "  %-21s %s\n", "setup <client>", "Register the MCP server in claude, cursor or claude-desktop")
+	fmt.Fprintf(w, "  %-21s %s\n", "mcp", "Run the MCP server over stdio (what your agent talks to)")
+	fmt.Fprintln(w, "\nAudit steps (each is also the MCP tool sec_audit_<step>):")
 	for _, c := range registry.All() {
 		fmt.Fprintf(w, "  %-21s %s\n", c.Subcommand, c.Summary)
 	}
-	fmt.Fprintf(w, "  %-21s %s\n", "mcp", "Run JSON-RPC 2.0 MCP server over stdio")
-	fmt.Fprintf(w, "  %-21s %s\n", "version", "Print version and platform metadata")
+	fmt.Fprintln(w, "\nOther:")
+	fmt.Fprintf(w, "  %-21s %s\n", "version", "Print version and platform")
+	fmt.Fprintln(w, "\nOutput is JSON when piped and readable text on a terminal; force it with --format json|text.")
+	fmt.Fprintln(w, "Docs: https://github.com/fabriziosalmi/security-audit-cli")
+}
+
+func runDemo(args []string, stdout, stderr io.Writer, color bool) int {
+	fs := flag.NewFlagSet("demo", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dir := fs.String("dir", "", "Directory for the demo target and run (must be empty; default: a new temp dir)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if _, err := demo.Run(demo.Options{Dir: *dir, Color: color}, stdout); err != nil {
+		fmt.Fprintf(stderr, "demo failed: %v\n", err)
+		return 1
+	}
+	return 0
 }
