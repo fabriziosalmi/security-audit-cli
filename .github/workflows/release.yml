@@ -149,3 +149,61 @@ jobs:
           set -euo pipefail
           gh release create "$TAG" release/* --title "$TAG" --generate-notes || \
             gh release upload "$TAG" release/* --clobber
+
+  formula:
+    # On a tag: pin Formula/sec-audit.rb to the new tag and push it to a
+    # formula/v<version> branch (main is protected, and GITHUB_TOKEN may not
+    # open pull requests here), with a compare link in the job summary.
+    # On workflow_dispatch: check the formula against the latest release and
+    # push nothing.
+    name: Homebrew formula
+    needs: build
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The formula branch starts from main; a manual check uses the
+          # dispatched ref so the job can be tried before it is merged.
+          ref: ${{ github.ref_type == 'tag' && 'main' || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.25.x'
+      - name: Pin the formula and verify its build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            ver="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          else
+            ver="$VERSION"
+          fi
+          scripts/bump-formula.sh "$ver"
+          echo "ver=${ver#v}" >> "$GITHUB_ENV"
+      - name: Push formula branch
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Formula/sec-audit.rb; then
+            echo "Formula/sec-audit.rb already points at v${ver}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="formula/v${ver}"
+          gh auth setup-git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -m "chore(release): Homebrew formula for v${ver}" -- Formula/sec-audit.rb
+          git push origin "$branch"
+          {
+            echo "Formula/sec-audit.rb now points at v${ver} on branch \`${branch}\`."
+            echo
+            echo "Open the pull request: https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          } >> "$GITHUB_STEP_SUMMARY"

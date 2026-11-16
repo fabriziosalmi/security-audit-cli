@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Added
 
 - **Homebrew formula** in `Formula/sec-audit.rb`: `brew tap fabriziosalmi/sec-audit https://github.com/fabriziosalmi/security-audit-cli && brew install sec-audit` builds the tagged source; its test runs `sec-audit demo`.
+- **Formula pinning is automated**: `scripts/bump-formula.sh <version>` (`make formula`) downloads the tag tarball twice, refuses if the hashes differ, rewrites `url` and `sha256`, then builds the tarball the way the formula does and runs `version` and `demo`. The `formula` job in `release.yml` runs it on every tag and pushes a `formula/v<version>` branch with a compare link in the job summary (`main` is protected and `GITHUB_TOKEN` cannot open pull requests in this repository); a manual `workflow_dispatch` checks the latest release and pushes nothing.
 
 ### Fixed
 
