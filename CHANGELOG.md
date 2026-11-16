@@ -10,6 +10,10 @@ All notable changes to this project are documented in this file. The format is b
 
 - **Homebrew formula** in `Formula/sec-audit.rb`: `brew tap fabriziosalmi/sec-audit https://github.com/fabriziosalmi/security-audit-cli && brew install sec-audit` builds the tagged source; its test runs `sec-audit demo`.
 
+### Fixed
+
+- **README release-binary install step**: the archive contains `sec-audit-<os>-<arch>`, not `sec-audit`, so `install -m 0755 sec-audit ...` failed. Verified against the v0.2.0 `darwin-arm64` asset.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
