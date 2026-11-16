@@ -195,10 +195,11 @@ func phaseHunt(p *printer, s *Summary, out string, cids []string) error {
 			strings.Count(fixtureHandler, "\n"))
 	}
 	s.BlockedLies++
-	why := firstLine(err.Error())
+	why := err.Error()
 	if i := strings.Index(why, "line 999"); i > 0 {
 		why = handlerPath + " " + strings.SplitN(why[i:], ";", 2)[0]
 	}
+	why = firstLine(why)
 	p.blocked("hunter-submit", "cites "+handlerPath+":999", why)
 
 	if _, err := engine.SubmitHunter(out, hunterID, hunterResult(cids, artifact)); err != nil {
