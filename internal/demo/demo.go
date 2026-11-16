@@ -336,7 +336,7 @@ func phaseRender(p *printer, s *Summary, target, out string) error {
 	if !res.GatePassed {
 		gate = "FAILED, a CI job would exit 2"
 		if _, list, ok := strings.Cut(res.GateFailureReason, "finding(s): "); ok {
-			gate += " (" + list + ")"
+			gate += ": " + list
 		}
 	}
 	p.ok("--fail-on high", gate)
