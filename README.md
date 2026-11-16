@@ -101,7 +101,7 @@ brew install sec-audit
 gh release download --repo fabriziosalmi/security-audit-cli --pattern "sec-audit-darwin-arm64.tar.gz"
 gh attestation verify sec-audit-darwin-arm64.tar.gz --repo fabriziosalmi/security-audit-cli
 tar -xzf sec-audit-darwin-arm64.tar.gz
-install -m 0755 sec-audit ~/.local/bin/sec-audit
+install -m 0755 sec-audit-darwin-arm64 ~/.local/bin/sec-audit
 ```
 
 **Go** 1.24 or newer:
