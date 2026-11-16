@@ -88,6 +88,13 @@ It also shows `render` refusing before the Phase 5 record check, a verifier reje
 
 ## Install
 
+**Homebrew** (macOS and Linux, builds from the tagged source):
+
+```sh
+brew tap fabriziosalmi/sec-audit https://github.com/fabriziosalmi/security-audit-cli
+brew install sec-audit
+```
+
 **Release binary** (macOS and Linux, amd64 and arm64), with SLSA build provenance:
 
 ```sh
