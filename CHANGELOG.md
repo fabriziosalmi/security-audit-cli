@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
+**Upgrade note**: `render` now refuses to mark a run complete until its closing coverage critic has run (`final_clean` for `standard` and `deep`, `post_wave` for `quick`). Runs driven by the `audit` prompt or shaped like `sec-audit demo` already do this. Otherwise run the critic `status` names, or render with `incomplete_reason`.
+
 ### Added
 
 - **Homebrew formula** in `Formula/sec-audit.rb`: `brew tap fabriziosalmi/sec-audit https://github.com/fabriziosalmi/security-audit-cli && brew install sec-audit` builds the tagged source; its test runs `sec-audit demo`.
