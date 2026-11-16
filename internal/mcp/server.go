@@ -75,6 +75,29 @@ func ServeStdio(r io.Reader, w io.Writer) error {
 	return scanner.Err()
 }
 
+// Version is reported as serverInfo.version. cmd/sec-audit sets it from its
+// own Version (injected at build time with -X main.Version) before serving,
+// so the CLI and the MCP server never disagree.
+var Version = "dev"
+
+// supportedProtocolVersions lists the MCP revisions this server can speak.
+// The server answers with the client's requested version when it is listed,
+// and with the oldest one otherwise.
+var supportedProtocolVersions = []string{"2024-11-05", "2025-03-26", "2025-06-18"}
+
+func negotiateProtocol(params json.RawMessage) string {
+	var p struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	_ = json.Unmarshal(params, &p)
+	for _, v := range supportedProtocolVersions {
+		if v == p.ProtocolVersion {
+			return v
+		}
+	}
+	return supportedProtocolVersions[0]
+}
+
 func handleRequest(req jsonRPCRequest) jsonRPCResponse {
 	switch req.Method {
 	case "initialize":
@@ -82,16 +105,38 @@ func handleRequest(req jsonRPCRequest) jsonRPCResponse {
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Result: map[string]any{
-				"protocolVersion": "2024-11-05",
+				"protocolVersion": negotiateProtocol(req.Params),
 				"capabilities": map[string]any{
-					"tools": map[string]any{},
+					"tools":   map[string]any{},
+					"prompts": map[string]any{},
 				},
 				"serverInfo": map[string]any{
 					"name":    "sec-audit",
-					"version": "0.1.2",
+					"version": Version,
 				},
+				"instructions": Instructions,
 			},
 		}
+	case "ping":
+		return jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{}}
+	case "prompts/list":
+		return jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{"prompts": PromptDefs()}}
+	case "prompts/get":
+		var p struct {
+			Name      string            `json:"name"`
+			Arguments map[string]string `json:"arguments"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return jsonRPCResponse{
+				JSONRPC: "2.0", ID: req.ID,
+				Error: &rpcError{Code: -32602, Message: fmt.Sprintf("invalid params: %v", err)},
+			}
+		}
+		res, err := GetPrompt(p.Name, p.Arguments)
+		if err != nil {
+			return jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: err.Error()}}
+		}
+		return jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: res}
 	case "tools/list":
 		return jsonRPCResponse{
 			JSONRPC: "2.0",
