@@ -90,7 +90,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	term := r.URL.Query().Get("q")
-	rows, err := h.DB.Query("SELECT id FROM notes WHERE owner = ? AND body LIKE ?", user, "%"+term+"%")
+	pattern := "%" + term + "%"
+	rows, err := h.DB.Query("SELECT id FROM notes WHERE owner = ? AND body LIKE ?", user, pattern)
 	if err != nil {
 		http.Error(w, "search failed", http.StatusInternalServerError)
 		return

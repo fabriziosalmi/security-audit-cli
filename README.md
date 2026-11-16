@@ -80,7 +80,7 @@ These are the real gate messages from `sec-audit demo`:
 | Bad submission | Gate | Message |
 | :--- | :--- | :--- |
 | Evidence file is a symlink to `/etc/passwd` | `artifact-promote` | `scratch leaf "poc-output.txt" is not a regular non-symlink file` |
-| Trace cites `internal/notes/handler.go:999` | `hunter-submit` | `line 999 out of range (file has 67 lines)` |
+| Trace cites `internal/notes/handler.go:999` | `hunter-submit` | `line 999 out of range (file has 68 lines)` |
 | The hunter asks to verify its own finding | `agent-assign` | `agent_id "hunter-wave1-a" was already used in this run` |
 | An audited file is edited before render | `status`, `render` | SHA-256 drift on `internal/notes/handler.go`, render refused |
 

@@ -107,15 +107,17 @@ func idorCandidate() map[string]any {
 
 func traversalCandidate() map[string]any {
 	return map[string]any{
-		"proposed_verdict":  "confirmed",
-		"fingerprint":       fpTraversal,
-		"title":             "Export reads any file the server can read",
-		"description":       "GET /export joins the name query parameter onto ExportDir; ../ segments leave the directory.",
-		"root_cause":        "filepath.Join cleans ../ segments, so a relative name can resolve outside ExportDir, and nothing checks the result.",
+		"proposed_verdict": "confirmed",
+		"fingerprint":      fpTraversal,
+		"title":            "Export reads any file the server can read",
+		"description":      "GET /export joins the name query parameter onto ExportDir; ../ segments leave the directory.",
+		"root_cause": "filepath.Join cleans ../ segments, so a relative name can resolve outside ExportDir, " +
+			"and nothing checks the result.",
 		"intended_behavior": "Export only serves files that resolve inside ExportDir.",
 		"trace": []map[string]any{
 			at(mainPath, fixtureMain, `"GET /export"`, "entrypoint", "main", "Route registered for exports"),
-			at(handlerPath, fixtureHandler, `name := r.URL.Query().Get("name")`, "propagation", "Handler.Export", "File name taken from the query string"),
+			at(handlerPath, fixtureHandler, `name := r.URL.Query().Get("name")`,
+				"propagation", "Handler.Export", "File name taken from the query string"),
 			at(handlerPath, fixtureHandler, `os.ReadFile(filepath.Join(h.ExportDir, name))`, "sink", "Handler.Export", "Joined path read from disk"),
 		},
 		"evidence": []map[string]any{
@@ -152,11 +154,15 @@ func sqliCandidate() map[string]any {
 		"intended_behavior": "Search input is never interpreted as SQL.",
 		"trace": []map[string]any{
 			at(mainPath, fixtureMain, `"GET /search"`, "entrypoint", "main", "Route registered for search"),
-			at(handlerPath, fixtureHandler, `term := r.URL.Query().Get("q")`, "propagation", "Handler.Search", "Search term from the query string"),
-			at(handlerPath, fixtureHandler, `h.DB.Query("SELECT id FROM notes WHERE owner = ?`, "sink", "Handler.Search", "Term passed to the query"),
+			at(handlerPath, fixtureHandler, `term := r.URL.Query().Get("q")`,
+				"propagation", "Handler.Search", "Search term from the query string"),
+			at(handlerPath, fixtureHandler, `pattern := "%" + term + "%"`,
+				"propagation", "Handler.Search", "Term concatenated into the LIKE pattern"),
+			at(handlerPath, fixtureHandler, `h.DB.Query("SELECT id FROM notes WHERE owner = ?`,
+				"sink", "Handler.Search", "Pattern passed to the query"),
 		},
 		"evidence": []map[string]any{
-			ev(handlerPath, fixtureHandler, `h.DB.Query("SELECT id FROM notes WHERE owner = ?`, "String concatenation next to a SQL query"),
+			ev(handlerPath, fixtureHandler, `pattern := "%" + term + "%"`, "User input concatenated just before a SQL query"),
 		},
 		"conditions": []map[string]any{
 			{"kind": "authentication_level", "description": "Any caller"},
