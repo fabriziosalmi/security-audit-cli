@@ -6,7 +6,18 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- **`sec-audit demo`**: runs a complete audit (recon, hunt, two coverage critics, three Phase 3 verifiers, two Phase 5 record verifiers, render) against a small Go API embedded in the binary, with scripted agent output instead of a model. It submits four things a bad agent would submit (a symlink to `/etc/passwd` as evidence, a citation to line 999 of a 67-line file, the hunter asking to verify its own finding, and a source file edited after review) and exits non-zero if any gate accepts one. It leaves the target and the run on disk so `REPORT.md`, `findings.sarif`, the advisories and `manifest.sha256` can be inspected. Measured on Apple M4: 22 steps in about 300 ms.
+- **MCP `instructions` and an `audit` prompt**: `initialize` now returns instructions that tell the coordinating agent how to drive the tools, and `prompts/list` / `prompts/get` expose an `audit` prompt (arguments `target`, `profile`, `output_dir`) with the full procedure. Claude Code lists it as `/mcp__sec-audit__audit`. `TestPlaybookNamesOnlyRealTools` fails if the text names a tool that is not registered.
+- **`sec-audit setup claude|cursor|claude-desktop|print`**: registers the MCP server. `claude` runs `claude mcp add --scope user`; `cursor` and `claude-desktop` merge an entry into the JSON config, keep every other key, and save the previous file as `.bak`; `--print` shows the change without making it.
+- **Readable output on a terminal**: `init`, `status`, `validate`, `render` and `version` print text when stdout is a terminal and JSON otherwise (pipes, CI, agents, the VS Code extension). `--format json|text` forces either; `NO_COLOR` is honoured.
+- **`docs/demo.tape` and `make demo-gif`** record the README animation with VHS.
+- The MCP server answers `ping` and negotiates `protocolVersion` (`2024-11-05`, `2025-03-26`, `2025-06-18`).
+
 ### Fixed
+
+- **`initialize` reported `serverInfo.version` `0.1.2`** while the binary was `0.1.4`: the value was hardcoded in `internal/mcp`. The server now reports the version the binary was built with (`-X main.Version`); `TestMCPServerVersionMatchesCLI` fails if the two diverge.
 
 - **`render` writes every advisory inside `advisories/` (found while auditing lmget)**:
   - The advisory path was `advisories/GHSA-<fingerprint>.md`, but the fingerprint pattern allows `/` and `.`. A fingerprint such as `lmget/oci-token` failed the render (`no such file or directory`), and one such as `x/../../name` made `render` write the advisory outside `advisories/`, or outside the output directory with more `../` segments. Fingerprints come from agent output.

@@ -3,7 +3,7 @@ VERSION     ?= 0.1.4
 LDFLAGS     := -s -w -X main.Version=$(VERSION)
 INSTALL_BIN := $(HOME)/.local/bin/sec-audit
 
-.PHONY: help build test vet bench fuzz install vsix clean
+.PHONY: help build test vet bench fuzz install vsix clean demo-gif
 
 help:
 	@echo "Targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  fuzz     - run all 4 fuzz targets for 3 seconds each"
 	@echo "  install  - build and atomically install binary into $(INSTALL_BIN)"
 	@echo "  vsix     - package deterministic VS Code extension (.vsix) into dist/"
+	@echo "  demo-gif - record docs/demo.gif from docs/demo.tape (needs vhs)"
 	@echo "  clean    - remove local build and coverage artifacts"
 
 build:
@@ -48,6 +49,9 @@ install: build
 
 vsix:
 	go run ./editors/vscode/pack -dir editors/vscode -out dist/sec-audit-vscode-$(VERSION).vsix
+
+demo-gif: build
+	vhs docs/demo.tape
 
 clean:
 	rm -f sec-audit sec-audit.exe *.test *.out coverage.txt coverage.html
