@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- **`render` marked a run complete without the closing coverage critic**: `final_clean_done` was recorded but never checked, so a `standard` or `deep` run could render as complete with no critic at all. `render` now requires a `final_clean` critic for `standard` and `deep` and a `post_wave` critic for `quick`, matching the critic reserves of the `init` budget gate; `status` names the missing critic in `next_required_actions`; runs rendered with `incomplete_reason` are exempt. A critic that adds or reopens units resets `final_clean_done`. This also applies to runs whose units were all carried over: hunters are skipped, the critic is not. `TestRenderRequiresFinalCleanCritic` and `TestReopeningAfterFinalCleanRequiresAnotherPass` fail without the change.
 - **README release-binary install step**: the archive contains `sec-audit-<os>-<arch>`, not `sec-audit`, so `install -m 0755 sec-audit ...` failed. Verified against the v0.2.0 `darwin-arm64` asset.
 
 ## [0.2.0] - 2026-11-16

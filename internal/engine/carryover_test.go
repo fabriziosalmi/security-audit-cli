@@ -89,7 +89,9 @@ func TestCarryoverUnchangedUnitsAndFailOnGates(t *testing.T) {
 			units2[0].Status, units2[0].PriorStatus,
 		)
 	}
-	// Run 2 can immediately render without invoking a single hunter!
+	// Run 2 renders without invoking a single hunter; its coverage critic
+	// still reviews this run's ledger for surfaces the carried units miss.
+	closeCoverage(t, run2Dir, "quick", "critic-run2")
 	r2, err := engine.Render(engine.RenderRequest{OutputDir: run2Dir, FailOn: "any"})
 	if err != nil || !r2.GatePassed || r2.RunStatus != "complete" {
 		t.Fatalf("expected immediate complete render on carried-over clean run, got %+v err=%v", r2, err)
@@ -147,6 +149,7 @@ func BenchmarkEndToEndWorkflow(b *testing.B) {
 		}); err != nil {
 			b.Fatal(err)
 		}
+		closeCoverage(b, outDir, "quick", "critic-1")
 		if _, err := engine.Render(engine.RenderRequest{OutputDir: outDir}); err != nil {
 			b.Fatal(err)
 		}
