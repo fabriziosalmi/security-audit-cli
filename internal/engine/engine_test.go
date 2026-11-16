@@ -387,6 +387,8 @@ func TestEndToEndAndBreakTests(t *testing.T) {
 		t.Fatalf("second SubmitRecordVerifier failed: %v", err)
 	}
 
+	closeCoverage(t, outDir, "standard", "critic-final")
+
 	// 11. Render Phase 6 Reports and SARIF
 	renderRes, err := engine.Render(engine.RenderRequest{OutputDir: outDir})
 	if err != nil {

@@ -106,6 +106,7 @@ func TestBitForBitReproducibility(t *testing.T) {
 				t.Fatalf("SubmitVerifier %s: %v", vid, err)
 			}
 		}
+		closeCoverage(t, outDir, "quick", "critic-1")
 		rRes, err := engine.Render(engine.RenderRequest{OutputDir: outDir})
 		if err != nil {
 			t.Fatalf("Render: %v", err)
@@ -339,6 +340,8 @@ func TestDraconianAdversarialMatrixAndManifestTamper(t *testing.T) {
 			t.Fatalf("SubmitRecordVerifier %s: %v", pair[0], err)
 		}
 	}
+
+	closeCoverage(t, outDir, "standard", "critic-final")
 
 	// Render and verify manifest.sha256 entries (8 base files + 2 GHSA advisories = 10) against on-disk SHA-256 digests
 	stBeforeRender, err := engine.Status(engine.StatusRequest{OutputDir: outDir})

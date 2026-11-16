@@ -47,7 +47,7 @@ Asking a model to audit code produces confident prose. In practice it fails in a
 | :--- | :--- |
 | Citations to files or lines that do not exist | Every `file:line` in a candidate or record is opened through `os.OpenRoot` and checked against the real line count before it is accepted. |
 | The agent that found a bug also confirms it | Roles are separate agents with single-use ids. `verifier != hunter`, `record_verifier != hunter, verifier`, enforced at assignment and again at submission. |
-| Silent coverage gaps | Work is a ledger of coverage units derived from entrypoints, trust boundaries and attack-class playbooks. Render refuses while units are planned or in progress, or while hunter-reported gaps have not been reviewed by a coverage critic. |
+| Silent coverage gaps | Work is a ledger of coverage units derived from entrypoints, trust boundaries and attack-class playbooks. Render refuses while units are planned or in progress, while hunter-reported gaps have not been reviewed by a coverage critic, or before the closing critic pass (`final_clean` for `standard` and `deep`, `post_wave` for `quick`). |
 | Report describes code that has changed | Every reviewed source file is pinned by SHA-256. `validate`, `status` and `render` re-hash them and refuse on drift. |
 | Evidence files that point elsewhere | Agent scratch output is promoted to evidence through an 11-step descriptor-based copy: no symlinks, no hardlinks, no FIFOs, byte caps, re-`fstat` after read. |
 | Ambiguous JSON | Every payload is pre-scanned: duplicate keys at any depth are rejected (`{"verdict":"rejected","verdict":"confirmed"}`), with caps on depth, fields, tokens and size. |
@@ -164,7 +164,7 @@ sec-audit render   --output-dir ./run --fail-on high
 | 3 | `verifier-submit` | `verifier != hunter`, record validated against `report-schema.json`, citations checked on disk, `findings.json` updated. |
 | 5 | `record-verify-submit` | `record_verifier` differs from hunter and verifier; a material replacement needs one more fresh record verifier. |
 | 5-6 | `validate` | JSON preflight, ledger and findings validators, cross-file consistency, SHA-256 drift, optional `--fail-on` gate. |
-| 6 | `render` | Refuses on any validation error, drift, unverified candidate or record, unreviewed hunter gap, or open unit; writes the reports, SARIF, advisories and manifest. |
+| 6 | `render` | Refuses on any validation error, drift, unverified candidate or record, unreviewed hunter gap, open unit, or missing closing critic (`final_clean` for `standard`/`deep`, `post_wave` for `quick`) unless `incomplete_reason` is given; writes the reports, SARIF, advisories and manifest. |
 | 1-6 | `status` | Unit counts, open candidates, drift, and `next_required_actions`. |
 
 Meta commands outside the registry: `demo`, `setup`, `mcp`, `version`.
@@ -209,7 +209,7 @@ Apple M4, `darwin/arm64`, measured on 2026-11-16 with `go test -bench=. -benchme
 | `BenchmarkDeriveCoverageID` | 3.4 µs/op | 208 B/op | 1 |
 | `BenchmarkValidateCoverageLedger` | 19.2 µs/op (42 MB/s) | 11.4 KB/op | 256 |
 | `BenchmarkValidateFindings` | 27.0 µs/op (43 MB/s) | 20.2 KB/op | 477 |
-| `BenchmarkEndToEndWorkflow` (full run, `fsync` included) | 141 ms/op | 410 KB/op | 3,036 |
+| `BenchmarkEndToEndWorkflow` (full run with coverage critic, `fsync` included) | 121 ms/op (median of 3) | 514 KB/op | 4,196 |
 | `sec-audit demo` (22 steps, 5 runs) | median 351 ms | | |
 
 `make test` runs `go vet` and the race detector over every package; `make fuzz` runs the four fuzz targets.

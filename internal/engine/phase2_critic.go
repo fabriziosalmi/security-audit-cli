@@ -184,6 +184,11 @@ func SubmitCritic(outputDir, agentID, criticKind string, result CriticResult) (m
 	} else {
 		state.PostWaveCriticDone = true
 	}
+	// New or reopened units need another hunting wave, so an earlier clean
+	// final pass no longer describes the ledger.
+	if addedCount > 0 || reassignedCount > 0 {
+		state.FinalCleanDone = false
+	}
 	assign.Completed = true
 
 	if err := rs.SaveLedger(units); err != nil {

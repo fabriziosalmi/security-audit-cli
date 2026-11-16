@@ -185,6 +185,11 @@ func Render(req RenderRequest) (*RenderResponse, error) {
 			len(state.UncoveredQueue),
 		)
 	}
+	if meta.RunStatus != "incomplete" {
+		if missing := missingCoverageCritic(meta.Profile, state); missing != "" {
+			return nil, fmt.Errorf("cannot mark run complete: %s (pass incomplete_reason if budget exhausted)", missing)
+		}
+	}
 
 	var confirmed, needsVal, rejected []validator.Finding
 	for _, f := range findings {
@@ -395,6 +400,12 @@ func Status(req StatusRequest) (*StatusResponse, error) {
 	if len(driftedFiles) > 0 {
 		actions = append(actions, fmt.Sprintf("resolve source file drift on: %s", strings.Join(driftedFiles, ", ")))
 	}
+	if len(units) > 0 && len(plannedIDs) == 0 && len(inProgressIDs) == 0 && len(state.UncoveredQueue) == 0 &&
+		meta.RunStatus != "incomplete" {
+		if missing := missingCoverageCritic(meta.Profile, state); missing != "" {
+			actions = append(actions, "assign and submit "+missing)
+		}
+	}
 
 	readyToRender := len(actions) == 0
 	if readyToRender {
@@ -420,6 +431,23 @@ func Status(req StatusRequest) (*StatusResponse, error) {
 		ReadyToRender:         readyToRender,
 		NextRequiredActions:   actions,
 	}, nil
+}
+
+// missingCoverageCritic names the coverage critic a complete run still needs,
+// or returns "". The budget gate in Init reserves one critic for the quick
+// profile (post-wave, which also closes the run) and two for standard and
+// deep (post-wave plus a final_clean pass that adds and reopens nothing).
+func missingCoverageCritic(profile string, state *InternalState) string {
+	if profile == "quick" {
+		if state.PostWaveCriticDone || state.FinalCleanDone {
+			return ""
+		}
+		return "a post_wave coverage critic"
+	}
+	if state.FinalCleanDone {
+		return ""
+	}
+	return "a final_clean coverage critic (critic_kind=final_clean, stop=true, no missing units or reassignments)"
 }
 
 // advisoryFileName maps a fingerprint to one file name directly inside
