@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- **Homebrew formula** in `Formula/sec-audit.rb`: `brew tap fabriziosalmi/sec-audit https://github.com/fabriziosalmi/security-audit-cli && brew install sec-audit` builds the tagged source; its test runs `sec-audit demo`.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
