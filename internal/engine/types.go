@@ -138,12 +138,13 @@ type CriticMissingUnit struct {
 	Reason                   string                    `json:"reason"`
 }
 
-// CriticResult matches the JSON returned by a Phase 2 coverage critic.
+// CriticResult matches the JSON returned by a Phase 2 coverage critic. A critic
+// changes coverage only: leads carried from a prior run are decided by Phase 3
+// verifiers, never by a critic.
 type CriticResult struct {
 	MissingUnits       []CriticMissingUnit `json:"missing_units"`
 	ReassignIDs        []string            `json:"reassign_ids"`
 	ReassignmentReason string              `json:"reassignment_reason,omitempty"`
-	ResolvedPriorLeads []string            `json:"resolved_prior_leads"`
 	Stop               bool                `json:"stop"`
 }
 
