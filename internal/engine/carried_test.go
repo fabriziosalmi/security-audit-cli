@@ -253,3 +253,15 @@ func TestFingerprintOfThisRunNotOnAUnitStillFails(t *testing.T) {
 		t.Fatalf("render must refuse a fingerprint of this run on no unit, got %v", err)
 	}
 }
+
+// A critic cannot resolve carried leads: CriticResult has no field for it, so
+// only a Phase 3 verifier decides a carried fingerprint. The old
+// resolved_prior_leads key was declared but never read.
+func TestCriticResultHasNoResolvedPriorLeads(t *testing.T) {
+	dec := json.NewDecoder(strings.NewReader(`{"stop":true,"resolved_prior_leads":["` + fpCarriedLead + `"]}`))
+	dec.DisallowUnknownFields()
+	var res engine.CriticResult
+	if err := dec.Decode(&res); err == nil || !strings.Contains(err.Error(), "resolved_prior_leads") {
+		t.Fatalf("CriticResult must not declare resolved_prior_leads, got err=%v", err)
+	}
+}
