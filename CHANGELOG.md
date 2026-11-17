@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-17
+
 ### Fixed
 
 - **A run with `prior_run_dirs` could not render**: `init` carries the prior run's confirmed and `needs_validation` fingerprints into the new run and `status` asks for a Phase 3 verifier for each, but `validate` and `render` then required every finding to be listed in some unit's `result_fingerprints`, which only a hunter of this run writes. A carried fingerprint the hunters did not re-list, or one outside `scope_paths`, blocked the render for good. A carried fingerprint that a Phase 3 verifier of this run has decided now needs no unit; a fingerprint found in this run still does, and an undecided carried fingerprint still blocks a complete render. `REPORT.md` lists the carried records in a "Carried From Prior Runs" table with the prior run, the prior verdict, the verdict in this run, the verifier, and whether a unit of this run lists it. `TestCarriedFingerprintsDecidedByVerifiersRender` fails without the change; `TestFingerprintOfThisRunNotOnAUnitStillFails` and `TestCarriedDecidedFingerprints` keep the check for everything else.
