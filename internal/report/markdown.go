@@ -64,6 +64,7 @@ func BuildReportMD(
 			fmt.Fprintf(&b, "- `%s` (independent Phase 5 verification incomplete)\n", fp)
 		}
 	}
+	writeCarriedFromPriorRuns(&b, state, units)
 	b.WriteString("\n")
 
 	// Section 2: Security Posture Summary
@@ -322,6 +323,65 @@ func BuildAdvisoryMD(meta *store.RunMetadata, f validator.Finding) string {
 	}
 
 	return b.String()
+}
+
+// writeCarriedFromPriorRuns lists the records init carried from prior_run_dirs, with
+// the verdict this run's Phase 3 verifier gave each one and whether a coverage unit of
+// this run lists it. A carried record no unit lists was decided here, not re-hunted.
+func writeCarriedFromPriorRuns(b *strings.Builder, state *store.InternalState, units []validator.CoverageUnit) {
+	if state == nil {
+		return
+	}
+	linked := make(map[string]bool)
+	for _, u := range units {
+		for _, fp := range u.ResultFingerprints {
+			linked[fp] = true
+		}
+		for _, att := range u.Attempts {
+			for _, fp := range att.ResultFingerprints {
+				linked[fp] = true
+			}
+		}
+	}
+	type row struct{ fp, priorDir, priorVerdict string }
+	var rows []row
+	for _, co := range state.PriorCarryovers {
+		for _, fp := range co.CarriedConfirmed {
+			rows = append(rows, row{fp, co.PriorRunDir, "confirmed"})
+		}
+		for _, fp := range co.CarriedNeedsValidation {
+			rows = append(rows, row{fp, co.PriorRunDir, "needs_validation"})
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString("\n### Carried From Prior Runs\n\n")
+	b.WriteString("These records entered this run from a prior run's findings, not from a hunter of this run. " +
+		"Each needs a Phase 3 verifier of this run before a complete render. " +
+		"A record that no coverage unit of this run lists was re-decided here but not re-hunted.\n\n")
+	b.WriteString("| Fingerprint | Prior Run | Prior Verdict | Verdict In This Run | Phase 3 Verifier | Listed By A Unit Of This Run |\n")
+	b.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
+	for _, r := range rows {
+		verdict, verifier := "not decided (no Phase 3 verifier)", "none"
+		if env, ok := state.Candidates[r.fp]; ok && env != nil {
+			if env.FinalRecord != nil {
+				verdict = "`" + env.FinalRecord.Verdict + "`"
+				if !env.Phase5Verified || env.NeedsFreshVerify {
+					verdict += " (Phase 5 verification incomplete)"
+				}
+			}
+			if env.Phase3VerifierID != "" {
+				verifier = "`" + env.Phase3VerifierID + "`"
+			}
+		}
+		listed := "no"
+		if linked[r.fp] {
+			listed = "yes"
+		}
+		fmt.Fprintf(b, "| `%s` | `%s` | `%s` | %s | %s | %s |\n",
+			escapeTable(r.fp), escapeTable(r.priorDir), r.priorVerdict, verdict, verifier, listed)
+	}
 }
 
 func escapeTable(s string) string {

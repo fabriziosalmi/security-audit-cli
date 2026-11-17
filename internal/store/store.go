@@ -91,6 +91,24 @@ type InternalState struct {
 	SourceHashes       map[string]string             `json:"source_hashes,omitempty"`
 }
 
+// CarriedDecidedFingerprints returns the fingerprints that init carried from a prior run
+// (prior_carryovers) and that a Phase 3 verifier of this run has decided. A carried
+// fingerprint still waiting for its verifier is not included.
+func (st *InternalState) CarriedDecidedFingerprints() map[string]bool {
+	out := make(map[string]bool)
+	for _, co := range st.PriorCarryovers {
+		for _, list := range [][]string{co.CarriedConfirmed, co.CarriedNeedsValidation} {
+			for _, fp := range list {
+				env, ok := st.Candidates[fp]
+				if ok && env != nil && env.FinalRecord != nil && env.Phase3VerifierID != "" {
+					out[fp] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
 // RunStore provides crash-safe atomic persistence for all parent-owned files in an audit run directory.
 type RunStore struct {
 	OutputDir string

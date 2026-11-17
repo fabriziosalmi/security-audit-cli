@@ -81,6 +81,11 @@ func ValidateRunWithGate(outputDir, failOn string) (map[string]any, error) {
 		return nil, fmt.Errorf("ledger read error: %w", err)
 	}
 
+	state, serr := rs.LoadState()
+	if serr != nil {
+		return nil, fmt.Errorf("state read error: %w", serr)
+	}
+
 	units, _ := rs.LoadLedger()
 	var findings []validator.Finding
 	var findingsErrs []string
@@ -94,15 +99,11 @@ func ValidateRunWithGate(outputDir, failOn string) (map[string]any, error) {
 		findings, _ = rs.LoadFindings()
 		findingsCount = len(findings)
 		if len(ledgerErrs) == 0 && len(findingsErrs) == 0 {
-			crossErrs := validator.ValidateCrossFileConsistency(units, findings)
+			crossErrs := validator.ValidateCrossFileConsistency(units, findings, state.CarriedDecidedFingerprints())
 			findingsErrs = append(findingsErrs, crossErrs...)
 		}
 	}
 
-	state, serr := rs.LoadState()
-	if serr != nil {
-		return nil, fmt.Errorf("state read error: %w", serr)
-	}
 	driftErrs, _ := scanner.DetectSourceDrift(meta.Target, state)
 	findingsErrs = append(findingsErrs, driftErrs...)
 

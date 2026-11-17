@@ -244,9 +244,19 @@ func TestValidateLedgerStateTableAndAttempts(t *testing.T) {
 	crossErrs := validator.ValidateCrossFileConsistency(
 		[]validator.CoverageUnit{unit},
 		[]validator.Finding{{Fingerprint: "FIND-0001"}, {Fingerprint: "ORPHAN-999"}},
+		nil,
 	)
 	if len(crossErrs) != 1 || !strings.Contains(crossErrs[0], "ORPHAN-999") {
 		t.Fatalf("expected orphan finding to fail cross-file consistency, got %v", crossErrs)
+	}
+	// A decided carried fingerprint needs no unit; an orphan of this run still fails beside it.
+	crossErrs = validator.ValidateCrossFileConsistency(
+		[]validator.CoverageUnit{unit},
+		[]validator.Finding{{Fingerprint: "FIND-0001"}, {Fingerprint: "CARRIED-1"}, {Fingerprint: "ORPHAN-999"}},
+		map[string]bool{"CARRIED-1": true},
+	)
+	if len(crossErrs) != 1 || !strings.Contains(crossErrs[0], "ORPHAN-999") {
+		t.Fatalf("expected only the orphan of this run to fail beside a decided carried fingerprint, got %v", crossErrs)
 	}
 
 	// ValidateCoverageLedgerFile on disk + non-array JSON + invalid syntax + duplicate/unsorted units + bad checks
