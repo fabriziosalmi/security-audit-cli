@@ -171,3 +171,28 @@ func TestRunStoreAtomicLifecycle(t *testing.T) {
 		t.Fatalf("expected LoadArchitecture error")
 	}
 }
+
+// Only a fingerprint init carried from a prior run and a Phase 3 verifier of
+// this run decided is exempt from the unit link: not one still waiting for its
+// verifier, and not one a hunter of this run found.
+func TestCarriedDecidedFingerprints(t *testing.T) {
+	decided := func(verifier string) *CandidateEnvelope {
+		return &CandidateEnvelope{Phase3VerifierID: verifier, FinalRecord: &validator.Finding{}}
+	}
+	st := &InternalState{
+		PriorCarryovers: []PriorCarryover{{
+			CarriedConfirmed:       []string{"carried-decided", "carried-waiting"},
+			CarriedNeedsValidation: []string{"carried-lead-decided", "carried-missing"},
+		}},
+		Candidates: map[string]*CandidateEnvelope{
+			"carried-decided":      decided("verifier-a"),
+			"carried-waiting":      {HunterID: "prior-run-carryover"},
+			"carried-lead-decided": decided("verifier-b"),
+			"found-this-run":       decided("verifier-c"),
+		},
+	}
+	got := st.CarriedDecidedFingerprints()
+	if len(got) != 2 || !got["carried-decided"] || !got["carried-lead-decided"] {
+		t.Fatalf("want exactly carried-decided and carried-lead-decided, got %v", got)
+	}
+}

@@ -337,7 +337,10 @@ func validateSingleUnit(u CoverageUnit, rawUnit map[string]any, base, targetDir,
 }
 
 // ValidateCrossFileConsistency verifies that every finding in findings.json is linked by at least one unit in coverage-ledger.json.
-func ValidateCrossFileConsistency(units []CoverageUnit, findings []Finding) []string {
+// carriedDecided names the fingerprints carried from a prior run that a Phase 3 verifier of this run has decided: they
+// entered the run from prior_run_dirs, not from a hunter of this run, so no unit has to list them. Every other finding
+// must still be linked to a unit.
+func ValidateCrossFileConsistency(units []CoverageUnit, findings []Finding, carriedDecided map[string]bool) []string {
 	var errs []string
 	linkedInLedger := make(map[string]bool)
 	for _, u := range units {
@@ -351,7 +354,7 @@ func ValidateCrossFileConsistency(units []CoverageUnit, findings []Finding) []st
 		}
 	}
 	for idx, f := range findings {
-		if !linkedInLedger[f.Fingerprint] {
+		if !linkedInLedger[f.Fingerprint] && !carriedDecided[f.Fingerprint] {
 			errs = append(errs, fmt.Sprintf(
 				"findings[%d].fingerprint: %q is not referenced by any coverage unit result_fingerprints",
 				idx, f.Fingerprint,
