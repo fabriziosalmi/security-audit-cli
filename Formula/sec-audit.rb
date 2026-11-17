@@ -9,8 +9,8 @@
 class SecAudit < Formula
   desc "Gated multi-agent security audits: CLI and MCP server"
   homepage "https://github.com/fabriziosalmi/security-audit-cli"
-  url "https://github.com/fabriziosalmi/security-audit-cli/archive/refs/tags/v0.2.1.tar.gz"
-  sha256 "d4e9b1aced6caea9fe987fb3c8ed98d05f21a982f290f497245d95fa4ef07c03"
+  url "https://github.com/fabriziosalmi/security-audit-cli/archive/refs/tags/v0.2.2.tar.gz"
+  sha256 "bb76673aa58c0307f6511f2fc90cee8091af76dd543f4243a00388158aa9094b"
   license "MIT"
   head "https://github.com/fabriziosalmi/security-audit-cli.git", branch: "main"
 
