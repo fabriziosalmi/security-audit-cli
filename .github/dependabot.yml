@@ -1,6 +1,8 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
     directory: /
     schedule:
       interval: weekly
@@ -12,6 +14,8 @@ updates:
           - "github/codeql-action*"
 
   - package-ecosystem: gomod
+    cooldown:
+      default-days: 7
     directory: /
     schedule:
       interval: weekly
